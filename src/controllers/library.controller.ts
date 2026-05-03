@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Types } from "mongoose";
 import { AuthRequest } from "../types";
 import { LibraryDocument } from "../models/Document";
 import { s3Service } from "../services/storage/s3.service";
@@ -97,10 +98,37 @@ export const getDocumentSignedUrl = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
-    const signedUrl = await s3Service.getSignedUrl(doc.s3Key, 3600);
+    const signedUrl = await s3Service.getSignedDownloadUrl(doc.s3Key, 3600);
     sendSuccess(res, { signedUrl, expiresIn: 3600 }, "Signed URL generated");
   } catch (err) {
     sendError(res, "Failed to generate access URL", 500, (err as Error).message);
+  }
+};
+
+export const getPresignedUploadUrl = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { fileName, mimeType, folder = "DOCUMENTS" } = req.body;
+    if (!fileName || !mimeType) {
+      sendBadRequest(res, "fileName and mimeType are required");
+      return;
+    }
+
+    const validFolders = ["DOCUMENTS", "LIBRARY", "AVATARS"];
+    if (!validFolders.includes(folder)) {
+      sendBadRequest(res, `folder must be one of: ${validFolders.join(", ")}`);
+      return;
+    }
+
+    const result = await s3Service.getSignedUploadUrl(
+      folder as "DOCUMENTS" | "LIBRARY" | "AVATARS",
+      fileName,
+      mimeType,
+      300 // 5 min to complete upload
+    );
+
+    sendSuccess(res, { ...result, expiresIn: 300 }, "Pre-signed upload URL generated");
+  } catch (err) {
+    sendError(res, "Failed to generate upload URL", 500, (err as Error).message);
   }
 };
 
@@ -115,7 +143,7 @@ export const bookmarkDocument = async (req: AuthRequest, res: Response): Promise
     if (isBookmarked) {
       doc.bookmarks = doc.bookmarks.filter((b) => b.toString() !== userId);
     } else {
-      doc.bookmarks.push(new (require("mongoose").Types.ObjectId)(userId));
+      doc.bookmarks.push(new Types.ObjectId(userId));
     }
 
     await doc.save();

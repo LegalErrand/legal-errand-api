@@ -4,6 +4,7 @@ import {
   getMyDocuments,
   uploadDocument,
   getDocumentSignedUrl,
+  getPresignedUploadUrl,
   bookmarkDocument,
   deleteDocument,
 } from "../controllers/library.controller";
@@ -16,8 +17,9 @@ router.use(authenticate);
 
 router.get("/", getLibrary);                          // GET /library — browse platform library
 router.get("/my-documents", getMyDocuments);          // GET /library/my-documents
-router.post("/upload", uploadPDF, uploadDocument);    // POST /library/upload
-router.get("/:id/access", getDocumentSignedUrl);      // GET /library/:id/access — signed URL
+router.post("/upload", uploadPDF, uploadDocument);           // POST /library/upload — server-side upload
+router.post("/upload-url", getPresignedUploadUrl);           // POST /library/upload-url — client-side direct upload
+router.get("/:id/access", getDocumentSignedUrl);             // GET /library/:id/access — signed download URL
 router.post("/:id/bookmark", bookmarkDocument);       // POST /library/:id/bookmark
 router.delete("/:id", deleteDocument);                // DELETE /library/:id
 

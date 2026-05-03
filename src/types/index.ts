@@ -20,6 +20,7 @@ export interface TokenPayload extends JwtPayload {
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
+  file?: Express.Multer.File;
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
