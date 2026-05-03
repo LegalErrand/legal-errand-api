@@ -37,6 +37,9 @@ const start = async () => {
 };
 
 start().catch((err) => {
-  logger.error("Failed to start server:", err);
+  const message = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+  logger.error(`Failed to start server: ${message}`);
+  if (stack) logger.error(stack);
   process.exit(1);
 });
