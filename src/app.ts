@@ -1,37 +1,61 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import morgan from "morgan";
+import { requestLogger } from "./middleware/logger.middleware";
 import { env } from "./config/env";
+import { setupSwagger } from "./config/swagger";
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 
 const app = express();
 
-// ─── Security ─────────────────────────────────────────────────────────────────
-app.use(helmet());
+function originKey(origin: string): string {
+  try {
+    return new URL(origin).origin;
+  } catch {
+    return origin.trim().replace(/\/+$/, "");
+  }
+}
+
+const ALLOWED_ORIGINS = [
+  env.CLIENT_URL,
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "https://dev.legalerrand.com",
+  "https://legalerrand.com",
+];
+
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin || env.NODE_ENV === "development" || ALLOWED_ORIGINS.some((o) => originKey(o) === originKey(origin))) {
+        return callback(null, true);
+      }
+      callback(new Error(`Origin ${origin} not allowed`));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
   })
 );
 
-// ─── Parsing ──────────────────────────────────────────────────────────────────
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// ─── Logging ──────────────────────────────────────────────────────────────────
+setupSwagger(app);
+
 if (env.NODE_ENV !== "test") {
-  app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
+  app.use(requestLogger);
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/v1", routes);
 
-// ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFoundHandler);
 app.use(errorHandler);
 
