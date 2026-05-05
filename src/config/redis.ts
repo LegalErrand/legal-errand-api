@@ -15,7 +15,7 @@ export const connectRedis = async (): Promise<void> => {
     });
 
     client.on("connect", () => {
-      logger.info("✅ Redis connected");
+      logger.info("Redis connected");
       redisAvailable = true;
     });
 

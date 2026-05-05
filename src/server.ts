@@ -11,9 +11,9 @@ const start = async () => {
   await connectDB();
   await connectRedis();
 
-  const server = app.listen(PORT, () => {
-    logger.info(`🚀 LegalErrand API running on port ${PORT} [${env.NODE_ENV}]`);
-    logger.info(`📖 Health check: http://localhost:${PORT}/api/v1/health`);
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    logger.info(`LegalErrand API running on port ${PORT} [${env.NODE_ENV}]`);
+    logger.info(` Health check: http://127.0.0.1:${PORT}/api/v1/health`);
   });
 
   // ─── Graceful Shutdown ──────────────────────────────────────────────────────
