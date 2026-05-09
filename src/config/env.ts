@@ -37,6 +37,10 @@ const envSchema = z.object({
   // App
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
+
+  // Resend (waitlist confirmation emails)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
