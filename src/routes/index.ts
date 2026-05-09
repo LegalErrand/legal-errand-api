@@ -7,6 +7,8 @@ import questionsRoutes from "./questions.routes";
 import dashboardRoutes from "./dashboard.routes";
 import researchRoutes from "./research.routes";
 import waitlistRoutes from "./waitlist.routes";
+import userRoutes from "./user.routes";
+import adminRoutes from "./admin";
 
 const router = Router();
 
@@ -43,5 +45,7 @@ router.use("/questions", questionsRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/research", researchRoutes);
 router.use("/waitlist", waitlistRoutes);
+router.use("/user", userRoutes);
+router.use("/admin", adminRoutes);
 
 export default router;

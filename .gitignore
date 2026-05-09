@@ -27,3 +27,7 @@ Thumbs.db
 
 .env.production
 .env.staging
+
+*.pdf
+endpoints.json
+parse-pdf.js

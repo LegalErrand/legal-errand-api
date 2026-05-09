@@ -37,6 +37,9 @@ const envSchema = z.object({
   // App
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
+  
+  // Resend Email
+  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
 });
 
 const parsed = envSchema.safeParse(process.env);

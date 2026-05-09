@@ -181,6 +181,21 @@ export interface IReasoningScore {
   calculatedAt: Date;
 }
 
+// ─── Admin Auth ───────────────────────────────────────────────────────────────
+
+import { AdminRole } from "../models/Admin";
+
+export interface AdminTokenPayload extends JwtPayload {
+  adminId: string;
+  email: string;
+  role: AdminRole;
+  isAdmin: true;
+}
+
+export interface AdminRequest extends Request {
+  admin?: AdminTokenPayload;
+}
+
 // ─── Pagination ───────────────────────────────────────────────────────────────
 
 export interface PaginationQuery {
