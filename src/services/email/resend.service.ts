@@ -3,10 +3,17 @@ import { logger } from "../../utils/logger";
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 
-const waitlistEmailHtml = (greetingName: string): string => {
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const waitlistEmailHtml = (firstNameEscaped: string | null): string => {
   const primary = "#D97706";
   const primaryLight = "#F59E0B";
   const accentGreen = "#00FF78";
+  const helloLine = firstNameEscaped
+    ? `Hello ${firstNameEscaped},`
+    : "Hello there,";
+
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
@@ -17,18 +24,29 @@ const waitlistEmailHtml = (greetingName: string): string => {
         <table role="presentation" width="100%" style="max-width:560px;background:#1a1a1a;border-radius:12px;overflow:hidden;border:1px solid #2a2a2a;">
           <tr>
             <td style="padding:28px 28px 8px 28px;">
-              <p style="margin:0;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:${accentGreen};">LegalErrand</p>
-              <h1 style="margin:12px 0 0 0;font-size:24px;font-weight:600;color:#fafafa;line-height:1.3;">You&rsquo;re on the list</h1>
+              <p style="margin:0;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:${accentGreen};">LegalErrand Academy</p>
             </td>
           </tr>
           <tr>
             <td style="padding:8px 28px 28px 28px;">
-              <p style="margin:0 0 16px 0;font-size:16px;line-height:1.6;color:#d4d4d4;">${greetingName}</p>
-              <p style="margin:0 0 20px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
-                Thanks for joining the LegalErrand waitlist. We&rsquo;ll email you when spots open and share product updates along the way.
+              <p style="margin:0 0 20px 0;font-size:17px;line-height:1.55;color:#fafafa;">${helloLine}</p>
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
+                Your spot in LegalErrand Academy is confirmed. You just joined a group of law students who decided to study smarter.
               </p>
-              <p style="margin:0;font-size:15px;line-height:1.65;color:#a3a3a3;">
-                &mdash; The LegalErrand team
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
+                LegalErrand Academy is an AI-Native study platform built specifically for law students, and it&rsquo;s launching soon.
+              </p>
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
+                As a founding member you&rsquo;ll be part of our beta testing group, getting access before anyone else to test the platform and help shape what it becomes.
+              </p>
+              <p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
+                We&rsquo;ll also keep you updated on every step of the way, every feature we ship, every milestone we hit.
+              </p>
+              <p style="margin:0 0 24px 0;font-size:15px;line-height:1.65;color:#a3a3a3;">
+                You&rsquo;ll watch LegalErrand Academy come to life.
+              </p>
+              <p style="margin:0;font-size:15px;line-height:1.65;color:#d4d4d4;">
+                &mdash; The LegalErrand Team
               </p>
             </td>
           </tr>
@@ -58,9 +76,8 @@ export const sendWaitlistConfirmationEmail = async (
     return;
   }
 
-  const greetingName = name?.trim()
-    ? `Hi ${name.trim()},`
-    : "Hi there,";
+  const firstRaw = name?.trim() || null;
+  const firstEscaped = firstRaw ? escapeHtml(firstRaw) : null;
 
   const res = await fetch(RESEND_API_URL, {
     method: "POST",
@@ -71,8 +88,8 @@ export const sendWaitlistConfirmationEmail = async (
     body: JSON.stringify({
       from,
       to: [to],
-      subject: "You're on the LegalErrand waitlist",
-      html: waitlistEmailHtml(greetingName),
+      subject: "Your Spot is Secured.",
+      html: waitlistEmailHtml(firstEscaped),
     }),
   });
 
