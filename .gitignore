@@ -4,10 +4,12 @@ node_modules/
 # Build output
 dist/
 
-# Environment
+# Environment (never commit real secrets — use placeholders in .env.example only)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 
 # Logs
 *.log
@@ -24,6 +26,3 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
-
-.env.production
-.env.staging

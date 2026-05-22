@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Waitlist } from "../models/Waitlist";
-import { sendWaitlistConfirmationEmail } from "../services/email/resend.service";
+import { sendWaitlistConfirmationEmail } from "../services/email/zoho-mail.service";
 import { sendBadRequest, sendCreated, sendError } from "../utils/response";
 
 export const joinWaitlist = async (req: Request, res: Response): Promise<void> => {
@@ -33,7 +33,8 @@ export const joinWaitlist = async (req: Request, res: Response): Promise<void> =
       country: ctry,
     });
 
-    await sendWaitlistConfirmationEmail(normalizedEmail, first);
+    // Email is best-effort; waitlist signup succeeds even if SMTP fails
+    void sendWaitlistConfirmationEmail(normalizedEmail, first);
 
     sendCreated(res, newEntry, "Welcome to the waitlist");
   } catch (error: unknown) {

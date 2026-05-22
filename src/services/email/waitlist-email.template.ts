@@ -1,18 +1,14 @@
-import { env } from "../../config/env";
-import { logger } from "../../utils/logger";
-
-const RESEND_API_URL = "https://api.resend.com/emails";
-
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const waitlistEmailHtml = (firstNameEscaped: string | null): string => {
+export const WAITLIST_EMAIL_SUBJECT = "Your Spot is Secured.";
+
+export const buildWaitlistEmailHtml = (firstName?: string): string => {
   const primary = "#D97706";
   const primaryLight = "#F59E0B";
   const accentGreen = "#00FF78";
-  const helloLine = firstNameEscaped
-    ? `Hello ${firstNameEscaped},`
-    : "Hello there,";
+  const firstEscaped = firstName?.trim() ? escapeHtml(firstName.trim()) : null;
+  const helloLine = firstEscaped ? `Hello ${firstEscaped},` : "Hello there,";
 
   return `<!DOCTYPE html>
 <html>
@@ -59,48 +55,4 @@ const waitlistEmailHtml = (firstNameEscaped: string | null): string => {
   </table>
 </body>
 </html>`;
-};
-
-/**
- * Sends a waitlist confirmation to the subscriber via Resend REST API.
- * No-ops when Resend env vars are unset (logs a warning).
- */
-export const sendWaitlistConfirmationEmail = async (
-  to: string,
-  name?: string
-): Promise<void> => {
-  const apiKey = env.RESEND_API_KEY;
-  const from = env.RESEND_FROM;
-  if (!apiKey || !from) {
-    logger.warn("RESEND_API_KEY or RESEND_FROM missing; skip waitlist confirmation email");
-    return;
-  }
-
-  const firstRaw = name?.trim() || null;
-  const firstEscaped = firstRaw ? escapeHtml(firstRaw) : null;
-
-  const res = await fetch(RESEND_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: "Your Spot is Secured.",
-      html: waitlistEmailHtml(firstEscaped),
-    }),
-  });
-
-  const bodyText = await res.text();
-  if (!res.ok) {
-    logger.error("Resend API error sending waitlist email", {
-      status: res.status,
-      body: bodyText.slice(0, 500),
-    });
-    return;
-  }
-
-  logger.info("Waitlist confirmation email sent", { to });
 };
