@@ -2,7 +2,13 @@ import { Response } from "express";
 import { AdminRequest } from "../../types";
 import { Question, QuestionAttempt } from "../../models/Question";
 import { LAW_SUBJECTS, DIFFICULTY_LEVELS, QUESTION_TYPES } from "../../utils/constants";
-import { sendSuccess, sendCreated, sendBadRequest, sendNotFound, sendError } from "../../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendBadRequest,
+  sendNotFound,
+  sendError,
+} from "../../utils/response";
 
 export const listQuestions = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
@@ -17,7 +23,10 @@ export const listQuestions = async (req: AdminRequest, res: Response): Promise<v
     if (search) filter.$text = { $search: search as string };
 
     const [questions, total] = await Promise.all([
-      Question.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      Question.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       Question.countDocuments(filter),
     ]);
 
@@ -48,10 +57,14 @@ export const getQuestion = async (req: AdminRequest, res: Response): Promise<voi
       ]),
     ]);
 
-    sendSuccess(res, {
-      ...question.toJSON(),
-      stats: { attemptCount, avgScore: avgScore[0]?.avg ?? null },
-    }, "Question retrieved");
+    sendSuccess(
+      res,
+      {
+        ...question.toJSON(),
+        stats: { attemptCount, avgScore: avgScore[0]?.avg ?? null },
+      },
+      "Question retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve question", 500, (err as Error).message);
   }
@@ -78,7 +91,15 @@ export const createQuestion = async (req: AdminRequest, res: Response): Promise<
       return;
     }
 
-    const question = await Question.create({ type, subject, difficulty, prompt, modelAnswer, gradingNotes, tags: tags || [] });
+    const question = await Question.create({
+      type,
+      subject,
+      difficulty,
+      prompt,
+      modelAnswer,
+      gradingNotes,
+      tags: tags || [],
+    });
 
     sendCreated(res, question, "Question created");
   } catch (err) {
@@ -88,7 +109,16 @@ export const createQuestion = async (req: AdminRequest, res: Response): Promise<
 
 export const updateQuestion = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const ALLOWED = ["type", "subject", "difficulty", "prompt", "modelAnswer", "gradingNotes", "tags", "isActive"];
+    const ALLOWED = [
+      "type",
+      "subject",
+      "difficulty",
+      "prompt",
+      "modelAnswer",
+      "gradingNotes",
+      "tags",
+      "isActive",
+    ];
     const updates: Record<string, unknown> = {};
 
     for (const field of ALLOWED) {
@@ -113,7 +143,10 @@ export const updateQuestion = async (req: AdminRequest, res: Response): Promise<
       return;
     }
 
-    const question = await Question.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    const question = await Question.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
     if (!question) {
       sendNotFound(res, "Question not found");
       return;
@@ -200,7 +233,11 @@ export const bulkImportQuestions = async (req: AdminRequest, res: Response): Pro
       }))
     );
 
-    sendCreated(res, { questions: created, count: created.length }, "Questions imported successfully");
+    sendCreated(
+      res,
+      { questions: created, count: created.length },
+      "Questions imported successfully"
+    );
   } catch (err) {
     sendError(res, "Bulk import failed", 500, (err as Error).message);
   }

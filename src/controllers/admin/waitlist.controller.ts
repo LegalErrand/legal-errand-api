@@ -20,7 +20,10 @@ export const listWaitlist = async (req: AdminRequest, res: Response): Promise<vo
     }
 
     const [entries, total] = await Promise.all([
-      Waitlist.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      Waitlist.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       Waitlist.countDocuments(filter),
     ]);
 
@@ -66,7 +69,11 @@ export const getWaitlistStats = async (_req: AdminRequest, res: Response): Promi
       ]),
     ]);
 
-    sendSuccess(res, { total, byCountry, byLevel, byUniversity, dailySignups }, "Waitlist stats retrieved");
+    sendSuccess(
+      res,
+      { total, byCountry, byLevel, byUniversity, dailySignups },
+      "Waitlist stats retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve waitlist stats", 500, (err as Error).message);
   }

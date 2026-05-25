@@ -11,7 +11,13 @@ import { User } from "../models/User";
 import { deepseekService } from "../services/ai/deepseek.service";
 import { redisService } from "../services/cache/redis.service";
 import { CACHE_TTL, REDIS_KEYS } from "../utils/constants";
-import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendError,
+} from "../utils/response";
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 
@@ -20,22 +26,28 @@ export const getDashboard = async (req: AuthRequest, res: Response): Promise<voi
     const userId = req.user!.userId;
     const cacheKey = REDIS_KEYS.DASHBOARD_CACHE(userId);
     const cached = await redisService.get(cacheKey);
-    if (cached) { sendSuccess(res, cached, "Dashboard (cached)"); return; }
+    if (cached) {
+      sendSuccess(res, cached, "Dashboard (cached)");
+      return;
+    }
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const [recentProgress, latestScore, recentAttempts, totalNotes, activeGoals] = await Promise.all([
-      Progress.find({ userId, createdAt: { $gte: thirtyDaysAgo } }).sort({ date: 1 }),
-      ReasoningScore.findOne({ userId }).sort({ calculatedAt: -1 }),
-      QuestionAttempt.find({ userId }).sort({ createdAt: -1 }).limit(10),
-      Note.countDocuments({ userId }),
-      Goal.find({ userId, isCompleted: false }).sort({ deadline: 1 }).limit(3),
-    ]);
+    const [recentProgress, latestScore, recentAttempts, totalNotes, activeGoals] =
+      await Promise.all([
+        Progress.find({ userId, createdAt: { $gte: thirtyDaysAgo } }).sort({ date: 1 }),
+        ReasoningScore.findOne({ userId }).sort({ calculatedAt: -1 }),
+        QuestionAttempt.find({ userId }).sort({ createdAt: -1 }).limit(10),
+        Note.countDocuments({ userId }),
+        Goal.find({ userId, isCompleted: false }).sort({ deadline: 1 }).limit(3),
+      ]);
 
     const studiedDates = new Set(recentProgress.map((p) => p.date));
     const streakData = buildStreakData(studiedDates);
-    const subjectScores = computeSubjectScores(recentAttempts as unknown as InstanceType<typeof QuestionAttempt>[]);
+    const subjectScores = computeSubjectScores(
+      recentAttempts as unknown as InstanceType<typeof QuestionAttempt>[]
+    );
     const weakAreas = Object.entries(subjectScores)
       .filter(([, score]) => score < 60)
       .map(([subject]) => subject);
@@ -94,7 +106,9 @@ export const getActivity = async (req: AuthRequest, res: Response): Promise<void
 
     if (!type || type === "all" || type === "quizzes") {
       const attempts = await QuestionAttempt.find({ userId })
-        .populate<{ questionId: { prompt: string; subject: string } }>("questionId", "prompt subject")
+        .populate<{
+          questionId: { prompt: string; subject: string };
+        }>("questionId", "prompt subject")
         .sort({ createdAt: -1 });
 
       const quizItems: ActivityItem[] = attempts.map((a) => ({
@@ -160,14 +174,15 @@ export const getAchievements = async (req: AuthRequest, res: Response): Promise<
   try {
     const userId = req.user!.userId;
 
-    const [user, totalAttempts, totalCases, totalNotes, totalResearch, allProgress] = await Promise.all([
-      User.findById(userId),
-      QuestionAttempt.countDocuments({ userId }),
-      CaseExplanation.countDocuments({ userId }),
-      Note.countDocuments({ userId }),
-      ResearchSession.countDocuments({ userId }),
-      Progress.find({ userId }).sort({ date: 1 }),
-    ]);
+    const [user, totalAttempts, totalCases, totalNotes, totalResearch, allProgress] =
+      await Promise.all([
+        User.findById(userId),
+        QuestionAttempt.countDocuments({ userId }),
+        CaseExplanation.countDocuments({ userId }),
+        Note.countDocuments({ userId }),
+        ResearchSession.countDocuments({ userId }),
+        Progress.find({ userId }).sort({ date: 1 }),
+      ]);
 
     const studiedDates = new Set(allProgress.map((p) => p.date));
     const { current: currentStreak, longest: longestStreak } = buildStreakData(studiedDates);
@@ -179,7 +194,12 @@ export const getAchievements = async (req: AuthRequest, res: Response): Promise<
       { id: "streak_14", name: "14-Day Streak", category: "streak", earned: longestStreak >= 14 },
       { id: "streak_30", name: "30-Day Streak", category: "streak", earned: longestStreak >= 30 },
       { id: "streak_60", name: "60-Day Streak", category: "streak", earned: longestStreak >= 60 },
-      { id: "streak_100", name: "100-Day Streak", category: "streak", earned: longestStreak >= 100 },
+      {
+        id: "streak_100",
+        name: "100-Day Streak",
+        category: "streak",
+        earned: longestStreak >= 100,
+      },
       // Quiz badges
       { id: "quiz_10", name: "Quiz Starter", category: "quiz", earned: totalAttempts >= 10 },
       { id: "quiz_50", name: "Quiz Pro", category: "quiz", earned: totalAttempts >= 50 },
@@ -191,14 +211,28 @@ export const getAchievements = async (req: AuthRequest, res: Response): Promise<
       { id: "note_100", name: "Note Master", category: "learning", earned: totalNotes >= 100 },
       // Research badges
       { id: "research_10", name: "Researcher", category: "research", earned: totalResearch >= 10 },
-      { id: "research_50", name: "Research Pro", category: "research", earned: totalResearch >= 50 },
+      {
+        id: "research_50",
+        name: "Research Pro",
+        category: "research",
+        earned: totalResearch >= 50,
+      },
       // Special
       { id: "early_adopter", name: "Early Adopter", category: "special", earned: true },
-      { id: "referral_1", name: "Referral Champion", category: "special", earned: !!(user?.referredBy) },
+      {
+        id: "referral_1",
+        name: "Referral Champion",
+        category: "special",
+        earned: !!user?.referredBy,
+      },
     ];
 
     const earned = badges.filter((b) => b.earned);
-    sendSuccess(res, { badges, earned: earned.length, total: badges.length, currentStreak }, "Achievements retrieved");
+    sendSuccess(
+      res,
+      { badges, earned: earned.length, total: badges.length, currentStreak },
+      "Achievements retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve achievements", 500, (err as Error).message);
   }
@@ -246,7 +280,10 @@ export const createGoal = async (req: AuthRequest, res: Response): Promise<void>
 export const updateGoal = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const goal = await Goal.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!goal) { sendNotFound(res, "Goal not found"); return; }
+    if (!goal) {
+      sendNotFound(res, "Goal not found");
+      return;
+    }
 
     const { title, description, targetValue, currentValue, deadline, isCompleted } = req.body;
     if (title !== undefined) goal.title = title;
@@ -269,7 +306,10 @@ export const updateGoal = async (req: AuthRequest, res: Response): Promise<void>
 export const deleteGoal = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const goal = await Goal.findOneAndDelete({ _id: req.params.id, userId: req.user!.userId });
-    if (!goal) { sendNotFound(res, "Goal not found"); return; }
+    if (!goal) {
+      sendNotFound(res, "Goal not found");
+      return;
+    }
     sendSuccess(res, null, "Goal deleted");
   } catch (err) {
     sendError(res, "Failed to delete goal", 500, (err as Error).message);
@@ -283,19 +323,25 @@ export const getInsights = async (req: AuthRequest, res: Response): Promise<void
     const userId = req.user!.userId;
     const cacheKey = `insights:${userId}`;
     const cached = await redisService.get(cacheKey);
-    if (cached) { sendSuccess(res, cached, "Insights (cached)"); return; }
+    if (cached) {
+      sendSuccess(res, cached, "Insights (cached)");
+      return;
+    }
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const [recentProgress, recentAttempts, totalNotes] = await Promise.all([
       Progress.find({ userId, createdAt: { $gte: sevenDaysAgo } }).sort({ date: 1 }),
-      QuestionAttempt.find({ userId, createdAt: { $gte: sevenDaysAgo } })
-        .populate<{ questionId: { subject: string } }>("questionId", "subject"),
+      QuestionAttempt.find({ userId, createdAt: { $gte: sevenDaysAgo } }).populate<{
+        questionId: { subject: string };
+      }>("questionId", "subject"),
       Note.countDocuments({ userId }),
     ]);
 
-    const subjectScores = computeSubjectScores(recentAttempts as unknown as InstanceType<typeof QuestionAttempt>[]);
+    const subjectScores = computeSubjectScores(
+      recentAttempts as unknown as InstanceType<typeof QuestionAttempt>[]
+    );
     const studyDays = recentProgress.length;
     const totalQuestions = recentAttempts.length;
     const weakSubjects = Object.entries(subjectScores)
@@ -316,7 +362,9 @@ Data:
 - Weak subjects (score < 60%): ${weakSubjects.join(", ") || "none"}
 - Subject scores: ${JSON.stringify(subjectScores)}`;
 
-    const result = await deepseekService.structuredCompletion<{ insights: { type: string; message: string }[] }>(prompt);
+    const result = await deepseekService.structuredCompletion<{
+      insights: { type: string; message: string }[];
+    }>(prompt);
 
     await redisService.set(cacheKey, result, 3600); // Cache for 1 hour
     sendSuccess(res, result, "Insights retrieved");
@@ -333,7 +381,10 @@ export const getReasoningScore = async (req: AuthRequest, res: Response): Promis
 
     const [latestScore, scoreHistory] = await Promise.all([
       ReasoningScore.findOne({ userId }).sort({ calculatedAt: -1 }),
-      ReasoningScore.find({ userId }).sort({ calculatedAt: -1 }).limit(10).select("overall calculatedAt"),
+      ReasoningScore.find({ userId })
+        .sort({ calculatedAt: -1 })
+        .limit(10)
+        .select("overall calculatedAt"),
     ]);
 
     sendSuccess(res, { latest: latestScore, history: scoreHistory }, "Reasoning score retrieved");
@@ -351,7 +402,10 @@ function buildStreakData(studiedDates: Set<string>) {
 
   const sorted = Array.from(studiedDates).sort();
   for (let i = 0; i < sorted.length; i++) {
-    if (i === 0) { tempStreak = 1; continue; }
+    if (i === 0) {
+      tempStreak = 1;
+      continue;
+    }
     const prev = new Date(sorted[i - 1]);
     const curr = new Date(sorted[i]);
     const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
@@ -364,7 +418,9 @@ function buildStreakData(studiedDates: Set<string>) {
   return { current, longest, datesStudied: Array.from(studiedDates) };
 }
 
-function computeSubjectScores(attempts: InstanceType<typeof QuestionAttempt>[]): Record<string, number> {
+function computeSubjectScores(
+  attempts: InstanceType<typeof QuestionAttempt>[]
+): Record<string, number> {
   const bySubject: Record<string, number[]> = {};
 
   attempts.forEach((a) => {

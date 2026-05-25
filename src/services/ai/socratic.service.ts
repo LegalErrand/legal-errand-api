@@ -36,10 +36,7 @@ export const socraticService = {
     );
   },
 
-  async provideHint(
-    messages: ConversationMessage[],
-    hintsRemaining: number
-  ): Promise<string> {
+  async provideHint(messages: ConversationMessage[], hintsRemaining: number): Promise<string> {
     const updatedMessages: ConversationMessage[] = [
       ...messages,
       {

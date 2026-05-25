@@ -1,5 +1,4 @@
 export const userPaths: Record<string, unknown> = {
-
   // ─── Health ────────────────────────────────────────────────────────────────
 
   "/health": {
@@ -33,7 +32,10 @@ export const userPaths: Record<string, unknown> = {
                 email: { type: "string", format: "email", example: "chidi@unilag.edu.ng" },
                 password: { type: "string", minLength: 8, example: "MyPass123!" },
                 accountType: { type: "string", enum: ["Undergraduate", "Law School Student"] },
-                referralCode: { type: "string", description: "Optional referral code from another user" },
+                referralCode: {
+                  type: "string",
+                  description: "Optional referral code from another user",
+                },
               },
             },
           },
@@ -91,7 +93,11 @@ export const userPaths: Record<string, unknown> = {
         required: true,
         content: {
           "application/json": {
-            schema: { type: "object", required: ["email"], properties: { email: { type: "string" } } },
+            schema: {
+              type: "object",
+              required: ["email"],
+              properties: { email: { type: "string" } },
+            },
           },
         },
       },
@@ -207,7 +213,11 @@ export const userPaths: Record<string, unknown> = {
         required: true,
         content: {
           "application/json": {
-            schema: { type: "object", required: ["email"], properties: { email: { type: "string" } } },
+            schema: {
+              type: "object",
+              required: ["email"],
+              properties: { email: { type: "string" } },
+            },
           },
         },
       },
@@ -305,7 +315,8 @@ export const userPaths: Record<string, unknown> = {
     put: {
       tags: ["User"],
       summary: "Update avatar",
-      description: "First get a presigned URL from /library/upload-url (AVATARS folder), upload directly to S3, then call this endpoint with the resulting s3Key and URL.",
+      description:
+        "First get a presigned URL from /library/upload-url (AVATARS folder), upload directly to S3, then call this endpoint with the resulting s3Key and URL.",
       requestBody: {
         required: true,
         content: {
@@ -344,9 +355,12 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["User"],
       summary: "Get referral info",
-      description: "Returns the user's unique referral key, a ready-to-share link, and the list of users they referred.",
+      description:
+        "Returns the user's unique referral key, a ready-to-share link, and the list of users they referred.",
       responses: {
-        "200": { description: "Returns referralKey, referralLink, referredCount, referredUsers[]." },
+        "200": {
+          description: "Returns referralKey, referralLink, referredCount, referredUsers[].",
+        },
         "404": { description: "User not found." },
       },
     },
@@ -359,8 +373,35 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Library"],
       summary: "Browse platform library",
       parameters: [
-        { in: "query", name: "subject", schema: { type: "string", enum: ["Contract Law","Criminal Law","Tort Law","Constitutional Law","Property Law","Evidence Law","Jurisprudence","Commercial Law","Equity & Trusts","Administrative Law","Family Law","International Law"] } },
-        { in: "query", name: "type", schema: { type: "string", enum: ["case_law","statute","textbook","study_guide","exam_paper","user_upload"] } },
+        {
+          in: "query",
+          name: "subject",
+          schema: {
+            type: "string",
+            enum: [
+              "Contract Law",
+              "Criminal Law",
+              "Tort Law",
+              "Constitutional Law",
+              "Property Law",
+              "Evidence Law",
+              "Jurisprudence",
+              "Commercial Law",
+              "Equity & Trusts",
+              "Administrative Law",
+              "Family Law",
+              "International Law",
+            ],
+          },
+        },
+        {
+          in: "query",
+          name: "type",
+          schema: {
+            type: "string",
+            enum: ["case_law", "statute", "textbook", "study_guide", "exam_paper", "user_upload"],
+          },
+        },
         { in: "query", name: "search", schema: { type: "string" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
@@ -398,7 +439,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Library"],
       summary: "Get presigned S3 upload URL (single file)",
-      description: "Returns a presigned PUT URL. Upload the file directly from the client, then call /library/upload/complete to save the record.",
+      description:
+        "Returns a presigned PUT URL. Upload the file directly from the client, then call /library/upload/complete to save the record.",
       requestBody: {
         required: true,
         content: {
@@ -409,7 +451,11 @@ export const userPaths: Record<string, unknown> = {
               properties: {
                 fileName: { type: "string", example: "tort-law-notes.pdf" },
                 mimeType: { type: "string", example: "application/pdf" },
-                folder: { type: "string", enum: ["DOCUMENTS", "LIBRARY", "AVATARS"], default: "DOCUMENTS" },
+                folder: {
+                  type: "string",
+                  enum: ["DOCUMENTS", "LIBRARY", "AVATARS"],
+                  default: "DOCUMENTS",
+                },
               },
             },
           },
@@ -443,13 +489,19 @@ export const userPaths: Record<string, unknown> = {
                     },
                   },
                 },
-                folder: { type: "string", enum: ["DOCUMENTS", "LIBRARY", "AVATARS"], default: "DOCUMENTS" },
+                folder: {
+                  type: "string",
+                  enum: ["DOCUMENTS", "LIBRARY", "AVATARS"],
+                  default: "DOCUMENTS",
+                },
               },
             },
           },
         },
       },
-      responses: { "200": { description: "Array of { uploadUrl, s3Key, s3Url, fileName } per file." } },
+      responses: {
+        "200": { description: "Array of { uploadUrl, s3Key, s3Url, fileName } per file." },
+      },
     },
   },
 
@@ -457,7 +509,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Library"],
       summary: "Save single upload metadata",
-      description: "Call this after a successful S3 upload to persist the document record in the database.",
+      description:
+        "Call this after a successful S3 upload to persist the document record in the database.",
       requestBody: {
         required: true,
         content: {
@@ -566,7 +619,8 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Library"],
       summary: "Get signed download URL",
-      description: "Returns a temporary signed URL for viewing/downloading the document (1-hour expiry).",
+      description:
+        "Returns a temporary signed URL for viewing/downloading the document (1-hour expiry).",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
       responses: { "200": { description: "Returns signedUrl and expiresIn (3600)." } },
     },
@@ -614,7 +668,11 @@ export const userPaths: Record<string, unknown> = {
                 subject: { type: "string" },
                 tags: { type: "array", items: { type: "string" } },
                 folder: { type: "string", default: "General" },
-                source: { type: "string", enum: ["manual","ai_response","case_explainer","quiz","research","socratic"], default: "manual" },
+                source: {
+                  type: "string",
+                  enum: ["manual", "ai_response", "case_explainer", "quiz", "research", "socratic"],
+                  default: "manual",
+                },
                 sourceRef: { type: "string" },
                 linkedDocumentId: { type: "string" },
               },
@@ -630,8 +688,13 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Notes"],
       summary: "Get note templates",
-      description: "Returns 6 static templates: blank, IRAC, case brief, statute summary, research memo, lecture note.",
-      responses: { "200": { description: "Array of template objects with id, name, description, and starter content." } },
+      description:
+        "Returns 6 static templates: blank, IRAC, case brief, statute summary, research memo, lecture note.",
+      responses: {
+        "200": {
+          description: "Array of template objects with id, name, description, and starter content.",
+        },
+      },
     },
   },
 
@@ -686,7 +749,9 @@ export const userPaths: Record<string, unknown> = {
       summary: "AI quality analysis",
       description: "Scores note quality (0–100) and provides improvement feedback. Rate-limited.",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "Returns qualityScore and qualityFeedback saved on the note." } },
+      responses: {
+        "200": { description: "Returns qualityScore and qualityFeedback saved on the note." },
+      },
     },
   },
 
@@ -704,7 +769,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Notes"],
       summary: "AI expand note",
-      description: "Elaborates on the note content with Nigerian legal context and examples. Rate-limited.",
+      description:
+        "Elaborates on the note content with Nigerian legal context and examples. Rate-limited.",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
       responses: { "200": { description: "Returns expanded content." } },
     },
@@ -728,8 +794,16 @@ export const userPaths: Record<string, unknown> = {
       summary: "List questions",
       parameters: [
         { in: "query", name: "subject", schema: { type: "string" } },
-        { in: "query", name: "difficulty", schema: { type: "string", enum: ["beginner","intermediate","advanced"] } },
-        { in: "query", name: "type", schema: { type: "string", enum: ["hypothetical","issue_spotting","application"] } },
+        {
+          in: "query",
+          name: "difficulty",
+          schema: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
+        },
+        {
+          in: "query",
+          name: "type",
+          schema: { type: "string", enum: ["hypothetical", "issue_spotting", "application"] },
+        },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
       ],
@@ -741,10 +815,15 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Questions"],
       summary: "Get a random question",
-      description: "Used for the Today's Challenge feature. Optionally filter by subject or difficulty.",
+      description:
+        "Used for the Today's Challenge feature. Optionally filter by subject or difficulty.",
       parameters: [
         { in: "query", name: "subject", schema: { type: "string" } },
-        { in: "query", name: "difficulty", schema: { type: "string", enum: ["beginner","intermediate","advanced"] } },
+        {
+          in: "query",
+          name: "difficulty",
+          schema: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
+        },
       ],
       responses: { "200": { description: "A single random active question." } },
     },
@@ -754,7 +833,8 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Questions"],
       summary: "Get my question stats",
-      description: "Aggregated attempt counts and average scores grouped by subject, difficulty, and type.",
+      description:
+        "Aggregated attempt counts and average scores grouped by subject, difficulty, and type.",
       responses: { "200": { description: "Stats breakdown object." } },
     },
   },
@@ -776,7 +856,10 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Questions"],
       summary: "Get a single question",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "Question object." }, "404": { description: "Not found." } },
+      responses: {
+        "200": { description: "Question object." },
+        "404": { description: "Not found." },
+      },
     },
   },
 
@@ -784,7 +867,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Questions"],
       summary: "Submit answer for AI grading",
-      description: "AI grades using the IRAC rubric: Issue (25%), Rule (25%), Application (35%), Conclusion (15%).",
+      description:
+        "AI grades using the IRAC rubric: Issue (25%), Rule (25%), Application (35%), Conclusion (15%).",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
       requestBody: {
         required: true,
@@ -793,12 +877,19 @@ export const userPaths: Record<string, unknown> = {
             schema: {
               type: "object",
               required: ["answer"],
-              properties: { answer: { type: "string", description: "The student's written answer" } },
+              properties: {
+                answer: { type: "string", description: "The student's written answer" },
+              },
             },
           },
         },
       },
-      responses: { "200": { description: "Returns scores { issueIdentification, ruleStatement, application, conclusion, total } and aiFeedback." } },
+      responses: {
+        "200": {
+          description:
+            "Returns scores { issueIdentification, ruleStatement, application, conclusion, total } and aiFeedback.",
+        },
+      },
     },
   },
 
@@ -807,7 +898,9 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Questions"],
       summary: "Get my attempts for a specific question",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "All user attempts for that question, sorted newest first." } },
+      responses: {
+        "200": { description: "All user attempts for that question, sorted newest first." },
+      },
     },
   },
 
@@ -817,7 +910,8 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Dashboard"],
       summary: "Get full dashboard",
-      description: "Returns streak, 7-day stats, recent activity, subject mastery, active goals, and reasoning score. Cached 5 minutes in Redis.",
+      description:
+        "Returns streak, 7-day stats, recent activity, subject mastery, active goals, and reasoning score. Cached 5 minutes in Redis.",
       responses: { "200": { description: "Full dashboard data object." } },
     },
   },
@@ -826,7 +920,8 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Dashboard"],
       summary: "Get streak calendar",
-      description: "Returns current streak count and a 30-day activity calendar (true/false per day).",
+      description:
+        "Returns current streak count and a 30-day activity calendar (true/false per day).",
       responses: { "200": { description: "{ streak, lastStudyDate, calendar[] }." } },
     },
   },
@@ -835,13 +930,24 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Dashboard"],
       summary: "Get activity feed",
-      description: "Unified, chronological feed of question attempts, case explanations, and AI sessions.",
+      description:
+        "Unified, chronological feed of question attempts, case explanations, and AI sessions.",
       parameters: [
-        { in: "query", name: "type", schema: { type: "string", enum: ["all","quizzes","documents","ai_sessions"], default: "all" } },
+        {
+          in: "query",
+          name: "type",
+          schema: {
+            type: "string",
+            enum: ["all", "quizzes", "documents", "ai_sessions"],
+            default: "all",
+          },
+        },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
       ],
-      responses: { "200": { description: "Paginated activity items with type, title, score, createdAt." } },
+      responses: {
+        "200": { description: "Paginated activity items with type, title, score, createdAt." },
+      },
     },
   },
 
@@ -849,8 +955,11 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Dashboard"],
       summary: "Get achievements and badges",
-      description: "Computes 17 badges across 5 categories: streak, quiz, learning, research, special.",
-      responses: { "200": { description: "Array of { id, title, description, earned, earnedAt }." } },
+      description:
+        "Computes 17 badges across 5 categories: streak, quiz, learning, research, special.",
+      responses: {
+        "200": { description: "Array of { id, title, description, earned, earnedAt }." },
+      },
     },
   },
 
@@ -867,7 +976,8 @@ export const userPaths: Record<string, unknown> = {
     get: {
       tags: ["Dashboard"],
       summary: "Get Legal Reasoning Score",
-      description: "Returns the latest overall score, component breakdown, by-subject scores, and 10-entry history.",
+      description:
+        "Returns the latest overall score, component breakdown, by-subject scores, and 10-entry history.",
       responses: { "200": { description: "{ latest, history[] }." } },
     },
   },
@@ -892,7 +1002,10 @@ export const userPaths: Record<string, unknown> = {
                 title: { type: "string", example: "Complete 20 questions this week" },
                 description: { type: "string" },
                 targetValue: { type: "number", example: 20 },
-                unit: { type: "string", enum: ["hours","questions","notes","cases","sessions","flashcards"] },
+                unit: {
+                  type: "string",
+                  enum: ["hours", "questions", "notes", "cases", "sessions", "flashcards"],
+                },
                 deadline: { type: "string", format: "date", example: "2025-05-16" },
               },
             },
@@ -941,7 +1054,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["AI — Chat"],
       summary: "Send a message to the AI assistant",
-      description: "Nigerian law-specialised AI assistant. Rate-limited by daily quota (free: 10/day).",
+      description:
+        "Nigerian law-specialised AI assistant. Rate-limited by daily quota (free: 10/day).",
       requestBody: {
         required: true,
         content: {
@@ -957,7 +1071,10 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "Returns { reply, sessionId }." }, "429": { description: "Daily AI query limit reached." } },
+      responses: {
+        "200": { description: "Returns { reply, sessionId }." },
+        "429": { description: "Daily AI query limit reached." },
+      },
     },
   },
 
@@ -981,7 +1098,10 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "SSE stream of token chunks." }, "429": { description: "Daily limit reached." } },
+      responses: {
+        "200": { description: "SSE stream of token chunks." },
+        "429": { description: "Daily limit reached." },
+      },
     },
   },
 
@@ -993,7 +1113,12 @@ export const userPaths: Record<string, unknown> = {
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
       ],
-      responses: { "200": { description: "Paginated list of past conversation sessions with title, messageCount, lastMessage." } },
+      responses: {
+        "200": {
+          description:
+            "Paginated list of past conversation sessions with title, messageCount, lastMessage.",
+        },
+      },
     },
   },
 
@@ -1011,7 +1136,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["AI — Case Explainer"],
       summary: "Explain a legal case",
-      description: "AI extracts structured fields: facts, issue, holding, reasoning, significance, relatedCases[], practiceQuestions[]. Result cached 24h in Redis and persisted to DB.",
+      description:
+        "AI extracts structured fields: facts, issue, holding, reasoning, significance, relatedCases[], practiceQuestions[]. Result cached 24h in Redis and persisted to DB.",
       requestBody: {
         required: true,
         content: {
@@ -1027,7 +1153,10 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "Structured case breakdown." }, "429": { description: "Daily AI limit reached." } },
+      responses: {
+        "200": { description: "Structured case breakdown." },
+        "429": { description: "Daily AI limit reached." },
+      },
     },
   },
 
@@ -1048,7 +1177,10 @@ export const userPaths: Record<string, unknown> = {
       tags: ["AI — Case Explainer"],
       summary: "Get a single case explanation",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "Full case explanation object." }, "404": { description: "Not found." } },
+      responses: {
+        "200": { description: "Full case explanation object." },
+        "404": { description: "Not found." },
+      },
     },
   },
 
@@ -1124,7 +1256,9 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "Returns session summary and understanding score (0–100)." } },
+      responses: {
+        "200": { description: "Returns session summary and understanding score (0–100)." },
+      },
     },
   },
 
@@ -1134,7 +1268,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Research"],
       summary: "Search legal corpus",
-      description: "AI refines the query and returns ranked results from the document library. Rate-limited (free: 5/day).",
+      description:
+        "AI refines the query and returns ranked results from the document library. Rate-limited (free: 5/day).",
       requestBody: {
         required: true,
         content: {
@@ -1151,7 +1286,10 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "Returns sessionId, refinedQuery, and results[]." }, "429": { description: "Daily research limit reached." } },
+      responses: {
+        "200": { description: "Returns sessionId, refinedQuery, and results[]." },
+        "429": { description: "Daily research limit reached." },
+      },
     },
   },
 
@@ -1204,7 +1342,12 @@ export const userPaths: Record<string, unknown> = {
             schema: {
               type: "object",
               required: ["resultIndex"],
-              properties: { resultIndex: { type: "integer", description: "Zero-based index into session.results[]" } },
+              properties: {
+                resultIndex: {
+                  type: "integer",
+                  description: "Zero-based index into session.results[]",
+                },
+              },
             },
           },
         },

@@ -32,13 +32,19 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         reason: "no_account",
         hint: "Run: npx ts-node src/scripts/createSuperAdmin.ts",
       });
-      sendUnauthorized(res, "Invalid email or password", { email: normalizedEmail, reason: "no_account" });
+      sendUnauthorized(res, "Invalid email or password", {
+        email: normalizedEmail,
+        reason: "no_account",
+      });
       return;
     }
 
     if (!(await admin.comparePassword(password))) {
       logger.warn("Admin login failed", { email: normalizedEmail, reason: "invalid_password" });
-      sendUnauthorized(res, "Invalid email or password", { email: normalizedEmail, reason: "invalid_password" });
+      sendUnauthorized(res, "Invalid email or password", {
+        email: normalizedEmail,
+        reason: "invalid_password",
+      });
       return;
     }
 

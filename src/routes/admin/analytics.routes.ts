@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { getOverview, getUserGrowth, getUsageStats, getSubjectStats } from "../../controllers/admin/analytics.controller";
+import {
+  getOverview,
+  getUserGrowth,
+  getUsageStats,
+  getSubjectStats,
+} from "../../controllers/admin/analytics.controller";
 import { authenticateAdmin } from "../../middleware/adminAuth.middleware";
 
 const router = Router();

@@ -1,5 +1,4 @@
 import { deepseekService } from "./deepseek.service";
-import { GRADING_RUBRIC } from "../../utils/constants";
 import { AI_LIMITS } from "../../config/deepseek";
 
 interface GradingResult {

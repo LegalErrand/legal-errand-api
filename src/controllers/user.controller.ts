@@ -4,8 +4,6 @@ import { sendSuccess, sendBadRequest, sendError, sendUnauthorized } from "../uti
 import { AuthRequest } from "../types";
 import { logger } from "../utils/logger";
 import { s3Service } from "../services/storage/s3.service";
-import { redisService } from "../services/cache/redis.service";
-import { REDIS_KEYS } from "../utils/constants";
 
 export const updateBioData = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -29,7 +27,7 @@ export const updateBioData = async (req: AuthRequest, res: Response): Promise<vo
       schoolName,
       levelYear,
       matricNumber,
-      phoneNumber
+      phoneNumber,
     } = req.body;
 
     const user = await User.findById(userId);
@@ -127,7 +125,10 @@ export const getAvatarUrl = async (req: AuthRequest, res: Response): Promise<voi
 export const getReferral = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
-    if (!userId) { sendUnauthorized(res, "Not authenticated"); return; }
+    if (!userId) {
+      sendUnauthorized(res, "Not authenticated");
+      return;
+    }
 
     const [user, referredUsers] = await Promise.all([
       User.findById(userId).select("referralKey referredBy firstName"),
@@ -137,14 +138,21 @@ export const getReferral = async (req: AuthRequest, res: Response): Promise<void
         .sort({ createdAt: -1 }),
     ]);
 
-    if (!user) { sendUnauthorized(res, "User not found"); return; }
+    if (!user) {
+      sendUnauthorized(res, "User not found");
+      return;
+    }
 
-    sendSuccess(res, {
-      referralKey: user.referralKey,
-      referralLink: `https://legalerrand.com/join?ref=${user.referralKey}`,
-      referredCount: referredUsers.length,
-      referredUsers,
-    }, "Referral info retrieved");
+    sendSuccess(
+      res,
+      {
+        referralKey: user.referralKey,
+        referralLink: `https://legalerrand.com/join?ref=${user.referralKey}`,
+        referredCount: referredUsers.length,
+        referredUsers,
+      },
+      "Referral info retrieved"
+    );
   } catch (err) {
     logger.error("Failed to get referral info", err);
     sendError(res, "Failed to get referral info", 500, (err as Error).message);

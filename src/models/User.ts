@@ -89,7 +89,9 @@ UserSchema.pre("save", async function () {
   if (this.isNew && !this.referralKey) {
     // Generate a simple alphanumeric referral key (e.g. FIRSTNAME-RANDOM)
     const randomChars = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const baseName = this.firstName ? this.firstName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase() : "USER";
+    const baseName = this.firstName
+      ? this.firstName.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
+      : "USER";
     this.referralKey = `${baseName}-${randomChars}`;
   }
 

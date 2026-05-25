@@ -14,7 +14,8 @@ const otpEmailHtml = (title: string, body: string, otp: string): string => `
     </div>
   </div>`;
 
-const supportFrom = (): string => env.ZOHO_MAIL_FROM ?? "LegalErrand Support <noreply@legalerrand.com>";
+const supportFrom = (): string =>
+  env.ZOHO_MAIL_FROM ?? "LegalErrand Support <noreply@legalerrand.com>";
 
 export const emailService = {
   async sendPasswordResetOtp(email: string, otp: string): Promise<void> {
@@ -22,11 +23,12 @@ export const emailService = {
       from: supportFrom(),
       to: email,
       subject: "Your LegalErrand Password Reset OTP",
-      html: otpEmailHtml(
-        "Password Reset Request",
-        "You requested a password reset for your LegalErrand account. Your one-time password (OTP) is:",
-        otp
-      ) +
+      html:
+        otpEmailHtml(
+          "Password Reset Request",
+          "You requested a password reset for your LegalErrand account. Your one-time password (OTP) is:",
+          otp
+        ) +
         `<p style="color: #555; line-height: 1.5; font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 0 20px 20px;">
           This code expires in 10 minutes. If you did not request a password reset, you can safely ignore this email.
         </p>`,
@@ -39,11 +41,12 @@ export const emailService = {
       from: supportFrom(),
       to: email,
       subject: "Verify Your LegalErrand Account",
-      html: otpEmailHtml(
-        "Account Verification",
-        "Welcome to LegalErrand! Please use the following code to verify your school email address:",
-        otp
-      ) +
+      html:
+        otpEmailHtml(
+          "Account Verification",
+          "Welcome to LegalErrand! Please use the following code to verify your school email address:",
+          otp
+        ) +
         `<p style="color: #555; line-height: 1.5; font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 0 20px 20px;">
           This code expires in 15 minutes.
         </p>`,
