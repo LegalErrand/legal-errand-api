@@ -1,35 +1,53 @@
 import { Request, Response } from "express";
 import { Waitlist } from "../models/Waitlist";
-import { logger } from "../utils/logger";
+import { sendWaitlistConfirmationEmail } from "../services/email/zoho-mail.service";
+import { sendBadRequest, sendCreated, sendError } from "../utils/response";
 
 export const joinWaitlist = async (req: Request, res: Response): Promise<void> => {
   try {
     const { firstName, email, universityName, phone, level, country } = req.body;
 
-    // Basic validation
     if (!firstName || !email || !universityName || !phone || !level || !country) {
-      res.status(400).json({ success: false, message: "All fields are required" });
+      sendBadRequest(res, "All fields are required");
+      return;
+    }
+
+    const first = String(firstName).trim();
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const uni = String(universityName).trim();
+    const ph = String(phone).trim();
+    const lvl = String(level).trim();
+    const ctry = String(country).trim();
+
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      sendBadRequest(res, "Invalid email format");
       return;
     }
 
     const newEntry = await Waitlist.create({
-      firstName,
-      email,
-      universityName,
-      phone,
-      level,
-      country,
+      firstName: first,
+      email: normalizedEmail,
+      universityName: uni,
+      phone: ph,
+      level: lvl,
+      country: ctry,
     });
 
-    res.status(201).json({ success: true, data: newEntry });
-  } catch (error: any) {
-    // Handle duplicate email
-    if (error.code === 11000 && error.keyPattern && error.keyPattern.email) {
-      res.status(409).json({ success: false, message: "Email is already on the waitlist" });
+    // Email is best-effort; waitlist signup succeeds even if SMTP fails
+    void sendWaitlistConfirmationEmail(normalizedEmail, first);
+
+    sendCreated(res, newEntry, "Welcome to the waitlist");
+  } catch (error: unknown) {
+    const err = error as { code?: number; keyPattern?: { email?: boolean } };
+    if (err.code === 11000 && err.keyPattern?.email) {
+      sendError(res, "Email is already on the waitlist", 409);
       return;
     }
-    
-    logger.logError("Waitlist signup failed", error);
-    res.status(500).json({ success: false, message: "Server error while joining waitlist" });
+    sendError(
+      res,
+      "Server error while joining waitlist",
+      500,
+      error instanceof Error ? error : undefined
+    );
   }
 };
