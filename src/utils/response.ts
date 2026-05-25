@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { logger } from "./logger";
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -24,10 +25,28 @@ export const sendError = (
   res: Response,
   message: string,
   statusCode = 500,
-  error?: string
+  error?: string | unknown,
+  logContext?: Record<string, unknown>
 ): Response => {
+  if (statusCode >= 500) {
+    logger.logError(message, error, logContext);
+  } else if (statusCode >= 400) {
+    logger.warn(message, {
+      statusCode,
+      ...logContext,
+      ...(error !== undefined && { error: typeof error === "string" ? error : undefined }),
+    });
+  }
+
+  const errorDetail =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : undefined;
+
   const response: ApiResponse = { success: false, message };
-  if (error && process.env.NODE_ENV !== "production") response.error = error;
+  if (errorDetail && process.env.NODE_ENV !== "production") response.error = errorDetail;
   return res.status(statusCode).json(response);
 };
 
@@ -37,11 +56,21 @@ export const sendCreated = <T>(res: Response, data: T, message = "Created succes
 export const sendNotFound = (res: Response, message = "Resource not found"): Response =>
   sendError(res, message, 404);
 
-export const sendUnauthorized = (res: Response, message = "Unauthorized"): Response =>
-  sendError(res, message, 401);
+export const sendUnauthorized = (
+  res: Response,
+  message = "Unauthorized",
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 401, undefined, logContext);
 
-export const sendForbidden = (res: Response, message = "Forbidden"): Response =>
-  sendError(res, message, 403);
+export const sendForbidden = (
+  res: Response,
+  message = "Forbidden",
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 403, undefined, logContext);
 
-export const sendBadRequest = (res: Response, message: string): Response =>
-  sendError(res, message, 400);
+export const sendBadRequest = (
+  res: Response,
+  message: string,
+  error?: string | unknown,
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 400, error, logContext);

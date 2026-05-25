@@ -26,3 +26,8 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Local / scratch
+*.pdf
+endpoints.json
+parse-pdf.js

@@ -47,7 +47,7 @@ export const joinWaitlist = async (req: Request, res: Response): Promise<void> =
       res,
       "Server error while joining waitlist",
       500,
-      error instanceof Error ? error.message : undefined
+      error instanceof Error ? error : undefined
     );
   }
 };

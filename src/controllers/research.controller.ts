@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthRequest } from "../types";
 import { ResearchSession } from "../models/ResearchSession";
 import { LibraryDocument } from "../models/Document";
+import { Note } from "../models/Note";
 import { deepseekService } from "../services/ai/deepseek.service";
 import { Progress } from "../models/Progress";
 import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
@@ -10,18 +11,20 @@ const today = () => new Date().toISOString().split("T")[0];
 
 export const search = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { query, subject, type } = req.body;
+    const { query, subject, type, jurisdiction, courtLevel } = req.body;
     if (!query) { sendBadRequest(res, "Search query is required"); return; }
 
-    // Step 1: AI refines the query into a precise legal research question
     const refinedQuery = await deepseekService.chat(
       `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`
     );
 
-    // Step 2: Search the document library (text search)
     const docFilter: Record<string, unknown> = { isLibraryContent: true };
     if (subject) docFilter.subject = subject;
     if (type) docFilter.type = type;
+
+    // jurisdiction and courtLevel are stored in document metadata
+    if (jurisdiction) docFilter["metadata.jurisdiction"] = jurisdiction;
+    if (courtLevel) docFilter["metadata.courtLevel"] = courtLevel;
 
     const results = await LibraryDocument.find({
       ...docFilter,
@@ -31,7 +34,6 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
       .limit(10)
       .lean();
 
-    // Step 3: AI ranks and annotates results
     interface RankedResult {
       title: string;
       relevanceScore: number;
@@ -51,7 +53,6 @@ Return JSON:
         )
       : { results: [] };
 
-    // Step 4: Save research session
     const session = await ResearchSession.create({
       userId: req.user!.userId,
       query,
@@ -65,7 +66,6 @@ Return JSON:
       })),
     });
 
-    // Track activity
     await Progress.findOneAndUpdate(
       { userId: req.user!.userId, date: today() },
       { $inc: { researchSessions: 1 } },
@@ -140,5 +140,60 @@ export const getSession = async (req: AuthRequest, res: Response): Promise<void>
     sendSuccess(res, session, "Session retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve session", 500, (err as Error).message);
+  }
+};
+
+export const saveResultToNotes = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const session = await ResearchSession.findOne({
+      _id: req.params.id,
+      userId: req.user!.userId,
+    });
+    if (!session) { sendNotFound(res, "Research session not found"); return; }
+
+    const { resultIndex } = req.body;
+    const idx = parseInt(resultIndex ?? "0");
+    const result = session.results[idx];
+
+    if (!result) { sendBadRequest(res, "Result not found at given index"); return; }
+
+    const noteContent = `
+<h2>${result.title}</h2>
+<p><strong>Relevance:</strong> ${Math.round((result.relevanceScore ?? 0) * 100)}%</p>
+<h3>Summary</h3><p>${result.snippet}</p>
+<p><em>Source: Legal Research — "${session.query}"</em></p>
+`.trim();
+
+    const note = await Note.create({
+      userId: req.user!.userId,
+      title: result.title,
+      content: noteContent,
+      source: "research",
+      sourceRef: session._id.toString(),
+      tags: ["research", "legal"],
+    });
+
+    await Progress.findOneAndUpdate(
+      { userId: req.user!.userId, date: today() },
+      { $inc: { notesCreated: 1 } },
+      { upsert: true, new: true }
+    );
+
+    sendCreated(res, { note }, "Research result saved to notes");
+  } catch (err) {
+    sendError(res, "Failed to save result to notes", 500, (err as Error).message);
+  }
+};
+
+export const deleteSession = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const session = await ResearchSession.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user!.userId,
+    });
+    if (!session) { sendNotFound(res, "Session not found"); return; }
+    sendSuccess(res, null, "Research session deleted");
+  } catch (err) {
+    sendError(res, "Failed to delete session", 500, (err as Error).message);
   }
 };

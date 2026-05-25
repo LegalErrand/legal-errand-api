@@ -6,17 +6,15 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   
   res.on("finish", () => {
     const duration = Date.now() - start;
-    const message = `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`;
-    
-    // You can also log IP or User-Agent if needed
-    // const ip = req.ip || req.connection.remoteAddress;
-    
+    const detail = res.locals.logDetail as string | undefined;
+    const line = `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms${detail ? ` — ${detail}` : ""}`;
+
     if (res.statusCode >= 500) {
-      logger.error(message);
+      logger.error(line);
     } else if (res.statusCode >= 400) {
-      logger.warn(message);
+      logger.warn(line);
     } else {
-      logger.info(message);
+      logger.info(line);
     }
   });
 

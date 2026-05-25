@@ -38,7 +38,7 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
 
-  // Zoho Mail SMTP (waitlist confirmation emails)
+  // Zoho Mail SMTP (waitlist + OTP emails)
   ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
   ZOHO_SMTP_PORT: z.string().default("465"),
   ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),

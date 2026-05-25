@@ -76,6 +76,23 @@ export const s3Service = {
   },
 
   /**
+   * Generate presigned PUT URLs for multiple files in one call.
+   * Returns results in the same order as the input array.
+   */
+  async getBulkSignedUploadUrls(
+    files: Array<{ fileName: string; mimeType: string }>,
+    folder: keyof typeof S3_FOLDERS,
+    expiresInSeconds = 300
+  ): Promise<Array<{ uploadUrl: string; s3Key: string; s3Url: string; fileName: string }>> {
+    return Promise.all(
+      files.map(async ({ fileName, mimeType }) => {
+        const result = await this.getSignedUploadUrl(folder, fileName, mimeType, expiresInSeconds);
+        return { ...result, fileName };
+      })
+    );
+  },
+
+  /**
    * Check if a file exists in S3
    */
   async fileExists(s3Key: string): Promise<boolean> {
