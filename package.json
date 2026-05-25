@@ -12,7 +12,7 @@
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "prepare": "husky"
+    "prepare": "node scripts/prepare-husky.js"
   },
   "lint-staged": {
     "src/**/*.ts": [
