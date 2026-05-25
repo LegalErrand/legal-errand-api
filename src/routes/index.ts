@@ -13,7 +13,11 @@ import adminRoutes from "./admin";
 const router = Router();
 
 router.get("/health", (_req, res) => {
-  res.json({ success: true, message: "LegalErrand API is running", timestamp: new Date().toISOString() });
+  res.json({
+    success: true,
+    message: "LegalErrand API is running",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 router.use("/auth", authRoutes);

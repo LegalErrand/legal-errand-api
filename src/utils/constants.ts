@@ -69,11 +69,11 @@ export const GRADING_RUBRIC = {
 
 // Cache TTLs in seconds
 export const CACHE_TTL = {
-  DASHBOARD: 300,          // 5 minutes
-  CONVERSATION: 3600,      // 1 hour
-  DAILY_COUNT: 86400,      // 24 hours
-  CASE_EXPLAINER: 86400,   // 24 hours — case breakdowns don't change
-  LIBRARY_LIST: 600,       // 10 minutes
+  DASHBOARD: 300, // 5 minutes
+  CONVERSATION: 3600, // 1 hour
+  DAILY_COUNT: 86400, // 24 hours
+  CASE_EXPLAINER: 86400, // 24 hours — case breakdowns don't change
+  LIBRARY_LIST: 600, // 10 minutes
 } as const;
 
 function today(): string {

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { User } from "../models/User";
 import { env } from "../config/env";
-import { sendSuccess, sendCreated, sendBadRequest, sendUnauthorized, sendError } from "../utils/response";
+import { sendSuccess, sendBadRequest, sendUnauthorized, sendError } from "../utils/response";
 import { AuthRequest } from "../types";
 import crypto from "crypto";
 import { emailService } from "../services/email/email.service";
@@ -27,7 +27,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     let user = await User.findOne({ email: email.toLowerCase() });
-    
+
     if (user) {
       if (user.isEmailVerified) {
         sendBadRequest(res, "An account with this email already exists");
@@ -39,8 +39,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       user.password = password; // Will be hashed by pre-save hook
       user.accountType = accountType;
     } else {
-      user = new User({ firstName, lastName, email, password, accountType, isEmailVerified: false });
-      
+      user = new User({
+        firstName,
+        lastName,
+        email,
+        password,
+        accountType,
+        isEmailVerified: false,
+      });
+
       // If a referral code was provided, link it
       if (referralCode) {
         const referrer = await User.findOne({ referralKey: referralCode.toUpperCase() });
@@ -52,11 +59,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-    
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
     user.verificationOtp = hashedOtp;
     user.verificationOtpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-    
+
     await user.save();
     await emailService.sendVerificationOtp(user.email, otp);
 
@@ -75,9 +82,9 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       email: email.toLowerCase(),
-      verificationOtpExpires: { $gt: new Date() }
+      verificationOtpExpires: { $gt: new Date() },
     });
 
     if (!user || !user.verificationOtp) {
@@ -85,7 +92,7 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
     if (hashedOtp !== user.verificationOtp) {
       sendUnauthorized(res, "OTP is incorrect");
       return;
@@ -129,8 +136,8 @@ export const resendVerificationOtp = async (req: Request, res: Response): Promis
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-    
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
     user.verificationOtp = hashedOtp;
     user.verificationOtpExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
@@ -231,10 +238,10 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // Hash OTP before saving
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-    
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+
     user.resetPasswordOtp = hashedOtp;
     user.resetPasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
     await user.save();
@@ -255,9 +262,9 @@ export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       email: email.toLowerCase(),
-      resetPasswordOtpExpires: { $gt: new Date() }
+      resetPasswordOtpExpires: { $gt: new Date() },
     });
 
     if (!user || !user.resetPasswordOtp) {
@@ -265,7 +272,7 @@ export const verifyOtp = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
     if (hashedOtp !== user.resetPasswordOtp) {
       sendUnauthorized(res, "OTP is incorrect");
       return;
@@ -302,10 +309,15 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    let decoded: any;
+    let decoded: jwt.JwtPayload;
     try {
-      decoded = jwt.verify(resetToken, env.JWT_SECRET);
-    } catch (error) {
+      const verified = jwt.verify(resetToken, env.JWT_SECRET);
+      if (typeof verified === "string") {
+        sendUnauthorized(res, "Invalid or expired reset token");
+        return;
+      }
+      decoded = verified;
+    } catch {
       sendUnauthorized(res, "Invalid or expired reset token");
       return;
     }
@@ -351,10 +363,16 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const user = await User.findById(req.user!.userId).select("+password");
-    if (!user) { sendUnauthorized(res, "User not found"); return; }
+    if (!user) {
+      sendUnauthorized(res, "User not found");
+      return;
+    }
 
     const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) { sendUnauthorized(res, "Current password is incorrect"); return; }
+    if (!isMatch) {
+      sendUnauthorized(res, "Current password is incorrect");
+      return;
+    }
 
     user.password = newPassword;
     await user.save();
@@ -364,4 +382,3 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     sendError(res, "Failed to change password", 500, (err as Error).message);
   }
 };
-

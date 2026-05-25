@@ -1,5 +1,4 @@
 export const adminPaths: Record<string, unknown> = {
-
   // ─── Admin Auth ────────────────────────────────────────────────────────────
 
   "/admin/auth/login": {
@@ -94,7 +93,11 @@ export const adminPaths: Record<string, unknown> = {
                 lastName: { type: "string" },
                 email: { type: "string", format: "email" },
                 password: { type: "string", minLength: 8 },
-                role: { type: "string", enum: ["super_admin","content_admin","support_admin"], default: "support_admin" },
+                role: {
+                  type: "string",
+                  enum: ["super_admin", "content_admin", "support_admin"],
+                  default: "support_admin",
+                },
               },
             },
           },
@@ -109,7 +112,11 @@ export const adminPaths: Record<string, unknown> = {
       tags: ["Super Admin — Admin Management"],
       summary: "List all admins",
       parameters: [
-        { in: "query", name: "role", schema: { type: "string", enum: ["super_admin","content_admin","support_admin"] } },
+        {
+          in: "query",
+          name: "role",
+          schema: { type: "string", enum: ["super_admin", "content_admin", "support_admin"] },
+        },
         { in: "query", name: "isBlocked", schema: { type: "boolean" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
@@ -150,7 +157,9 @@ export const adminPaths: Record<string, unknown> = {
             schema: {
               type: "object",
               required: ["role"],
-              properties: { role: { type: "string", enum: ["super_admin","content_admin","support_admin"] } },
+              properties: {
+                role: { type: "string", enum: ["super_admin", "content_admin", "support_admin"] },
+              },
             },
           },
         },
@@ -170,7 +179,9 @@ export const adminPaths: Record<string, unknown> = {
           "application/json": {
             schema: {
               type: "object",
-              properties: { reason: { type: "string", description: "Reason shown if blocking (optional)" } },
+              properties: {
+                reason: { type: "string", description: "Reason shown if blocking (optional)" },
+              },
             },
           },
         },
@@ -207,10 +218,19 @@ export const adminPaths: Record<string, unknown> = {
       tags: ["Super Admin — User Management"],
       summary: "List all users",
       parameters: [
-        { in: "query", name: "search", schema: { type: "string" }, description: "Searches firstName, lastName, email" },
+        {
+          in: "query",
+          name: "search",
+          schema: { type: "string" },
+          description: "Searches firstName, lastName, email",
+        },
         { in: "query", name: "isBlocked", schema: { type: "boolean" } },
-        { in: "query", name: "tier", schema: { type: "string", enum: ["free","premium"] } },
-        { in: "query", name: "accountType", schema: { type: "string", enum: ["Undergraduate","Law School Student"] } },
+        { in: "query", name: "tier", schema: { type: "string", enum: ["free", "premium"] } },
+        {
+          in: "query",
+          name: "accountType",
+          schema: { type: "string", enum: ["Undergraduate", "Law School Student"] },
+        },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
       ],
@@ -228,7 +248,8 @@ export const adminPaths: Record<string, unknown> = {
     patch: {
       tags: ["Super Admin — User Management"],
       summary: "Update user details",
-      description: "Updatable fields: firstName, lastName, email, accountType, username, country, city, schoolName, levelYear, matricNumber, phoneNumber, tier, isEmailVerified.",
+      description:
+        "Updatable fields: firstName, lastName, email, accountType, username, country, city, schoolName, levelYear, matricNumber, phoneNumber, tier, isEmailVerified.",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
       requestBody: {
         required: true,
@@ -240,9 +261,9 @@ export const adminPaths: Record<string, unknown> = {
                 firstName: { type: "string" },
                 lastName: { type: "string" },
                 email: { type: "string" },
-                tier: { type: "string", enum: ["free","premium"] },
+                tier: { type: "string", enum: ["free", "premium"] },
                 isEmailVerified: { type: "boolean" },
-                accountType: { type: "string", enum: ["Undergraduate","Law School Student"] },
+                accountType: { type: "string", enum: ["Undergraduate", "Law School Student"] },
               },
             },
           },
@@ -284,7 +305,8 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Analytics"],
       summary: "Platform overview",
-      description: "Key counters: total users, active users (7d/30d), new today, premium count, conversion rate, document counts, question counts, activity totals, waitlist size.",
+      description:
+        "Key counters: total users, active users (7d/30d), new today, premium count, conversion rate, document counts, question counts, activity totals, waitlist size.",
       responses: { "200": { description: "Overview stats object." } },
     },
   },
@@ -294,9 +316,17 @@ export const adminPaths: Record<string, unknown> = {
       tags: ["Analytics"],
       summary: "User growth stats",
       parameters: [
-        { in: "query", name: "period", schema: { type: "string", enum: ["7d","30d","90d"], default: "30d" } },
+        {
+          in: "query",
+          name: "period",
+          schema: { type: "string", enum: ["7d", "30d", "90d"], default: "30d" },
+        },
       ],
-      responses: { "200": { description: "Daily growth chart, breakdown by account type, tier, and top 10 countries." } },
+      responses: {
+        "200": {
+          description: "Daily growth chart, breakdown by account type, tier, and top 10 countries.",
+        },
+      },
     },
   },
 
@@ -304,9 +334,14 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Analytics"],
       summary: "Platform usage stats",
-      description: "Daily aggregated study minutes, AI queries, notes, questions answered, research sessions. Top study streaks. Average IRAC scores.",
+      description:
+        "Daily aggregated study minutes, AI queries, notes, questions answered, research sessions. Top study streaks. Average IRAC scores.",
       parameters: [
-        { in: "query", name: "period", schema: { type: "string", enum: ["7d","30d","90d"], default: "30d" } },
+        {
+          in: "query",
+          name: "period",
+          schema: { type: "string", enum: ["7d", "30d", "90d"], default: "30d" },
+        },
       ],
       responses: { "200": { description: "Usage stats with daily breakdown and averages." } },
     },
@@ -316,7 +351,8 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Analytics"],
       summary: "Subject-level stats",
-      description: "Questions, attempts, documents, and average scores broken down by subject and difficulty.",
+      description:
+        "Questions, attempts, documents, and average scores broken down by subject and difficulty.",
       responses: { "200": { description: "Subject stats breakdown." } },
     },
   },
@@ -329,8 +365,16 @@ export const adminPaths: Record<string, unknown> = {
       summary: "List all questions",
       parameters: [
         { in: "query", name: "subject", schema: { type: "string" } },
-        { in: "query", name: "difficulty", schema: { type: "string", enum: ["beginner","intermediate","advanced"] } },
-        { in: "query", name: "type", schema: { type: "string", enum: ["hypothetical","issue_spotting","application"] } },
+        {
+          in: "query",
+          name: "difficulty",
+          schema: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
+        },
+        {
+          in: "query",
+          name: "type",
+          schema: { type: "string", enum: ["hypothetical", "issue_spotting", "application"] },
+        },
         { in: "query", name: "isActive", schema: { type: "boolean" } },
         { in: "query", name: "search", schema: { type: "string" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
@@ -349,9 +393,9 @@ export const adminPaths: Record<string, unknown> = {
               type: "object",
               required: ["type", "subject", "difficulty", "prompt"],
               properties: {
-                type: { type: "string", enum: ["hypothetical","issue_spotting","application"] },
+                type: { type: "string", enum: ["hypothetical", "issue_spotting", "application"] },
                 subject: { type: "string", example: "Tort Law" },
-                difficulty: { type: "string", enum: ["beginner","intermediate","advanced"] },
+                difficulty: { type: "string", enum: ["beginner", "intermediate", "advanced"] },
                 prompt: { type: "string" },
                 modelAnswer: { type: "string" },
                 gradingNotes: { type: "string", description: "Internal grading hints for the AI" },
@@ -464,8 +508,18 @@ export const adminPaths: Record<string, unknown> = {
       parameters: [
         { in: "query", name: "subject", schema: { type: "string" } },
         { in: "query", name: "type", schema: { type: "string" } },
-        { in: "query", name: "isLibraryContent", schema: { type: "boolean" }, description: "true = platform library, false = user uploads" },
-        { in: "query", name: "uploadedBy", schema: { type: "string" }, description: "Filter by user ID" },
+        {
+          in: "query",
+          name: "isLibraryContent",
+          schema: { type: "boolean" },
+          description: "true = platform library, false = user uploads",
+        },
+        {
+          in: "query",
+          name: "uploadedBy",
+          schema: { type: "string" },
+          description: "Filter by user ID",
+        },
         { in: "query", name: "search", schema: { type: "string" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
         { in: "query", name: "limit", schema: { type: "integer", default: 20 } },
@@ -478,7 +532,8 @@ export const adminPaths: Record<string, unknown> = {
     post: {
       tags: ["Library Management"],
       summary: "Get presigned URL for platform content upload",
-      description: "Uploads to the LIBRARY S3 folder. Follow up with /admin/library/upload/complete.",
+      description:
+        "Uploads to the LIBRARY S3 folder. Follow up with /admin/library/upload/complete.",
       requestBody: {
         required: true,
         content: {
@@ -512,7 +567,10 @@ export const adminPaths: Record<string, unknown> = {
               required: ["title", "type", "s3Key", "s3Url", "fileSize"],
               properties: {
                 title: { type: "string" },
-                type: { type: "string", enum: ["case_law","statute","textbook","study_guide","exam_paper"] },
+                type: {
+                  type: "string",
+                  enum: ["case_law", "statute", "textbook", "study_guide", "exam_paper"],
+                },
                 subject: { type: "string" },
                 s3Key: { type: "string" },
                 s3Url: { type: "string" },
@@ -579,7 +637,8 @@ export const adminPaths: Record<string, unknown> = {
     patch: {
       tags: ["Library Management"],
       summary: "Promote user upload to platform library",
-      description: "Sets isLibraryContent: true. Optionally update title, subject, type, and metadata in the same request.",
+      description:
+        "Sets isLibraryContent: true. Optionally update title, subject, type, and metadata in the same request.",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
       requestBody: {
         content: {
@@ -626,7 +685,12 @@ export const adminPaths: Record<string, unknown> = {
       tags: ["Waitlist Management"],
       summary: "List waitlist entries",
       parameters: [
-        { in: "query", name: "search", schema: { type: "string" }, description: "Search firstName, email, universityName" },
+        {
+          in: "query",
+          name: "search",
+          schema: { type: "string" },
+          description: "Search firstName, email, universityName",
+        },
         { in: "query", name: "country", schema: { type: "string" } },
         { in: "query", name: "level", schema: { type: "string" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },
@@ -640,7 +704,8 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Waitlist Management"],
       summary: "Waitlist statistics",
-      description: "Total count, top 10 countries, by study level, top 20 universities, and daily signup chart (30 days).",
+      description:
+        "Total count, top 10 countries, by study level, top 20 universities, and daily signup chart (30 days).",
       responses: { "200": { description: "Waitlist stats object." } },
     },
   },
@@ -650,7 +715,10 @@ export const adminPaths: Record<string, unknown> = {
       tags: ["Waitlist Management"],
       summary: "Get a waitlist entry",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "Waitlist entry." }, "404": { description: "Not found." } },
+      responses: {
+        "200": { description: "Waitlist entry." },
+        "404": { description: "Not found." },
+      },
     },
     delete: {
       tags: ["Waitlist Management"],
@@ -666,9 +734,13 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Support"],
       summary: "View full user profile",
-      description: "Returns the user object plus aggregated stats: note count, attempt count, research sessions, AI conversations, referral count, latest reasoning score.",
+      description:
+        "Returns the user object plus aggregated stats: note count, attempt count, research sessions, AI conversations, referral count, latest reasoning score.",
       parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "{ user, stats }." }, "404": { description: "Not found." } },
+      responses: {
+        "200": { description: "{ user, stats }." },
+        "404": { description: "Not found." },
+      },
     },
   },
 
@@ -676,7 +748,8 @@ export const adminPaths: Record<string, unknown> = {
     get: {
       tags: ["Support"],
       summary: "View user's recent activity",
-      description: "Last 30 days of question attempts, case explanations, research sessions, AI conversations, and daily progress records.",
+      description:
+        "Last 30 days of question attempts, case explanations, research sessions, AI conversations, and daily progress records.",
       parameters: [
         { in: "path", name: "id", required: true, schema: { type: "string" } },
         { in: "query", name: "page", schema: { type: "integer", default: 1 } },

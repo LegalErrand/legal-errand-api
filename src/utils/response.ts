@@ -39,19 +39,18 @@ export const sendError = (
   }
 
   const errorDetail =
-    typeof error === "string"
-      ? error
-      : error instanceof Error
-        ? error.message
-        : undefined;
+    typeof error === "string" ? error : error instanceof Error ? error.message : undefined;
 
   const response: ApiResponse = { success: false, message };
   if (errorDetail && process.env.NODE_ENV !== "production") response.error = errorDetail;
   return res.status(statusCode).json(response);
 };
 
-export const sendCreated = <T>(res: Response, data: T, message = "Created successfully"): Response =>
-  sendSuccess(res, data, message, 201);
+export const sendCreated = <T>(
+  res: Response,
+  data: T,
+  message = "Created successfully"
+): Response => sendSuccess(res, data, message, 201);
 
 export const sendNotFound = (res: Response, message = "Resource not found"): Response =>
   sendError(res, message, 404);

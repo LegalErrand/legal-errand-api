@@ -2,7 +2,13 @@ import { Response } from "express";
 import { Admin, ADMIN_ROLES, AdminRole } from "../../models/Admin";
 import { User } from "../../models/User";
 import { AdminRequest } from "../../types";
-import { sendSuccess, sendCreated, sendBadRequest, sendNotFound, sendError } from "../../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendBadRequest,
+  sendNotFound,
+  sendError,
+} from "../../utils/response";
 
 // ─── Admin Management ──────────────────────────────────────────────────────────
 
@@ -77,7 +83,10 @@ export const listAdmins = async (req: AdminRequest, res: Response): Promise<void
 
 export const getAdmin = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const admin = await Admin.findById(req.params.id).populate("createdBy", "firstName lastName email");
+    const admin = await Admin.findById(req.params.id).populate(
+      "createdBy",
+      "firstName lastName email"
+    );
     if (!admin) {
       sendNotFound(res, "Admin not found");
       return;
@@ -103,11 +112,7 @@ export const updateAdminRole = async (req: AdminRequest, res: Response): Promise
       return;
     }
 
-    const admin = await Admin.findByIdAndUpdate(
-      req.params.id,
-      { role },
-      { new: true }
-    );
+    const admin = await Admin.findByIdAndUpdate(req.params.id, { role }, { new: true });
 
     if (!admin) {
       sendNotFound(res, "Admin not found");
@@ -217,7 +222,10 @@ export const listUsers = async (req: AdminRequest, res: Response): Promise<void>
     }
 
     const [users, total] = await Promise.all([
-      User.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      User.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       User.countDocuments(filter),
     ]);
 
@@ -248,9 +256,19 @@ export const getUser = async (req: AdminRequest, res: Response): Promise<void> =
 export const updateUser = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
     const ALLOWED_FIELDS = [
-      "firstName", "lastName", "email", "accountType", "username",
-      "country", "city", "schoolName", "levelYear", "matricNumber",
-      "phoneNumber", "tier", "isEmailVerified",
+      "firstName",
+      "lastName",
+      "email",
+      "accountType",
+      "username",
+      "country",
+      "city",
+      "schoolName",
+      "levelYear",
+      "matricNumber",
+      "phoneNumber",
+      "tier",
+      "isEmailVerified",
     ];
 
     const updates: Record<string, unknown> = {};
@@ -265,7 +283,10 @@ export const updateUser = async (req: AdminRequest, res: Response): Promise<void
       return;
     }
 
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    const user = await User.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
     if (!user) {
       sendNotFound(res, "User not found");
       return;

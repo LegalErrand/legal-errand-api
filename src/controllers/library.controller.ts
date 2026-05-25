@@ -3,9 +3,13 @@ import { Types } from "mongoose";
 import { AuthRequest } from "../types";
 import { LibraryDocument } from "../models/Document";
 import { s3Service } from "../services/storage/s3.service";
-import { redisService } from "../services/cache/redis.service";
-import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
-import { CACHE_TTL } from "../utils/constants";
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendError,
+} from "../utils/response";
 
 export const getLibrary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -18,7 +22,10 @@ export const getLibrary = async (req: AuthRequest, res: Response): Promise<void>
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [docs, total] = await Promise.all([
-      LibraryDocument.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      LibraryDocument.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       LibraryDocument.countDocuments(filter),
     ]);
 
@@ -38,11 +45,17 @@ export const getMyDocuments = async (req: AuthRequest, res: Response): Promise<v
     const { page = "1", limit = "20", search } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const filter: Record<string, unknown> = { uploadedBy: req.user!.userId, isLibraryContent: false };
+    const filter: Record<string, unknown> = {
+      uploadedBy: req.user!.userId,
+      isLibraryContent: false,
+    };
     if (search) filter.$text = { $search: search as string };
 
     const [docs, total] = await Promise.all([
-      LibraryDocument.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      LibraryDocument.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       LibraryDocument.countDocuments(filter),
     ]);
 
@@ -55,7 +68,10 @@ export const getMyDocuments = async (req: AuthRequest, res: Response): Promise<v
 export const getDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
-    if (!doc) { sendNotFound(res, "Document not found"); return; }
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
 
     const isOwner = doc.uploadedBy?.toString() === req.user!.userId;
     if (!doc.isLibraryContent && !isOwner) {
@@ -72,7 +88,10 @@ export const getDocument = async (req: AuthRequest, res: Response): Promise<void
 export const updateDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
-    if (!doc) { sendNotFound(res, "Document not found"); return; }
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
 
     if (doc.uploadedBy?.toString() !== req.user!.userId) {
       res.status(403).json({ success: false, message: "You can only edit your own documents" });
@@ -97,7 +116,10 @@ export const getBookmarks = async (req: AuthRequest, res: Response): Promise<voi
     const userId = new Types.ObjectId(req.user!.userId);
 
     const [docs, total] = await Promise.all([
-      LibraryDocument.find({ bookmarks: userId }).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      LibraryDocument.find({ bookmarks: userId })
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       LibraryDocument.countDocuments({ bookmarks: userId }),
     ]);
 
@@ -109,7 +131,10 @@ export const getBookmarks = async (req: AuthRequest, res: Response): Promise<voi
 
 const MAX_BULK_FILES = 20;
 
-export const getBulkPresignedUploadUrls = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getBulkPresignedUploadUrls = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
   try {
     const { files, folder = "DOCUMENTS" } = req.body;
 
@@ -147,7 +172,10 @@ export const getBulkPresignedUploadUrls = async (req: AuthRequest, res: Response
   }
 };
 
-export const completeBulkDocumentUpload = async (req: AuthRequest, res: Response): Promise<void> => {
+export const completeBulkDocumentUpload = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
   try {
     const { documents } = req.body;
 
@@ -162,9 +190,18 @@ export const completeBulkDocumentUpload = async (req: AuthRequest, res: Response
 
     // Validate every entry before writing anything
     for (const [i, doc] of documents.entries()) {
-      if (!doc.title) { sendBadRequest(res, `documents[${i}]: title is required`); return; }
-      if (!doc.s3Key) { sendBadRequest(res, `documents[${i}]: s3Key is required`); return; }
-      if (!doc.s3Url) { sendBadRequest(res, `documents[${i}]: s3Url is required`); return; }
+      if (!doc.title) {
+        sendBadRequest(res, `documents[${i}]: title is required`);
+        return;
+      }
+      if (!doc.s3Key) {
+        sendBadRequest(res, `documents[${i}]: s3Key is required`);
+        return;
+      }
+      if (!doc.s3Url) {
+        sendBadRequest(res, `documents[${i}]: s3Url is required`);
+        return;
+      }
       const size = Number(doc.fileSize);
       if (!Number.isFinite(size) || size <= 0) {
         sendBadRequest(res, `documents[${i}]: fileSize must be a valid positive number`);
@@ -194,7 +231,10 @@ export const completeBulkDocumentUpload = async (req: AuthRequest, res: Response
 export const completeDocumentUpload = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { title, subject, s3Key, s3Url, fileSize } = req.body;
-    if (!title) { sendBadRequest(res, "Document title is required"); return; }
+    if (!title) {
+      sendBadRequest(res, "Document title is required");
+      return;
+    }
     if (!s3Key || !s3Url || !fileSize) {
       sendBadRequest(res, "s3Key, s3Url, and fileSize are required");
       return;
@@ -226,7 +266,10 @@ export const completeDocumentUpload = async (req: AuthRequest, res: Response): P
 export const getDocumentSignedUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
-    if (!doc) { sendNotFound(res, "Document not found"); return; }
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
 
     const isOwner = doc.uploadedBy?.toString() === req.user!.userId;
     if (!doc.isLibraryContent && !isOwner) {
@@ -271,7 +314,10 @@ export const getPresignedUploadUrl = async (req: AuthRequest, res: Response): Pr
 export const bookmarkDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
-    if (!doc) { sendNotFound(res, "Document not found"); return; }
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
 
     const userId = req.user!.userId;
     const isBookmarked = doc.bookmarks.some((b) => b.toString() === userId);
@@ -283,7 +329,11 @@ export const bookmarkDocument = async (req: AuthRequest, res: Response): Promise
     }
 
     await doc.save();
-    sendSuccess(res, { bookmarked: !isBookmarked }, isBookmarked ? "Bookmark removed" : "Bookmarked");
+    sendSuccess(
+      res,
+      { bookmarked: !isBookmarked },
+      isBookmarked ? "Bookmark removed" : "Bookmarked"
+    );
   } catch (err) {
     sendError(res, "Bookmark action failed", 500, (err as Error).message);
   }
@@ -292,7 +342,10 @@ export const bookmarkDocument = async (req: AuthRequest, res: Response): Promise
 export const deleteDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
-    if (!doc) { sendNotFound(res, "Document not found"); return; }
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
 
     if (doc.uploadedBy?.toString() !== req.user!.userId) {
       res.status(403).json({ success: false, message: "You can only delete your own documents" });

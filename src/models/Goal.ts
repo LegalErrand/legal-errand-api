@@ -1,6 +1,13 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export const GOAL_UNITS = ["hours", "questions", "notes", "cases", "sessions", "flashcards"] as const;
+export const GOAL_UNITS = [
+  "hours",
+  "questions",
+  "notes",
+  "cases",
+  "sessions",
+  "flashcards",
+] as const;
 export type GoalUnit = (typeof GOAL_UNITS)[number];
 
 export interface IGoalDocument extends Document {

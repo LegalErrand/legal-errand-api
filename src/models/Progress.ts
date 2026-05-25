@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
-import { LAW_SUBJECTS, LawSubject } from "../utils/constants";
+import { LawSubject } from "../utils/constants";
 
 // ─── Daily Progress Entry ─────────────────────────────────────────────────────
 
@@ -14,10 +14,6 @@ export interface IProgressDocument extends Document {
   researchSessions: number;
   subjectActivity: Partial<Record<LawSubject, number>>;
 }
-
-const subjectActivitySchema = Object.fromEntries(
-  LAW_SUBJECTS.map((s) => [s, { type: Number, default: 0 }])
-);
 
 const ProgressSchema = new Schema<IProgressDocument>(
   {

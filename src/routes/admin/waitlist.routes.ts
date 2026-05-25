@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { listWaitlist, getWaitlistStats, getWaitlistEntry, deleteWaitlistEntry } from "../../controllers/admin/waitlist.controller";
+import {
+  listWaitlist,
+  getWaitlistStats,
+  getWaitlistEntry,
+  deleteWaitlistEntry,
+} from "../../controllers/admin/waitlist.controller";
 import { authenticateAdmin } from "../../middleware/adminAuth.middleware";
 
 const router = Router();

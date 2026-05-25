@@ -12,8 +12,10 @@ import { sendSuccess, sendNotFound, sendError } from "../../utils/response";
 
 export const getUserProfile = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate("referredBy", "firstName lastName email");
+    const user = await User.findById(req.params.id).populate(
+      "referredBy",
+      "firstName lastName email"
+    );
 
     if (!user) {
       sendNotFound(res, "User not found");
@@ -38,18 +40,22 @@ export const getUserProfile = async (req: AdminRequest, res: Response): Promise<
       ReasoningScore.findOne({ userId: user._id }).sort({ calculatedAt: -1 }),
     ]);
 
-    sendSuccess(res, {
-      user,
-      stats: {
-        referredCount,
-        noteCount,
-        attemptCount,
-        researchCount,
-        caseCount,
-        conversationCount,
-        latestReasoningScore: latestScore?.overall ?? null,
+    sendSuccess(
+      res,
+      {
+        user,
+        stats: {
+          referredCount,
+          noteCount,
+          attemptCount,
+          researchCount,
+          caseCount,
+          conversationCount,
+          latestReasoningScore: latestScore?.overall ?? null,
+        },
       },
-    }, "User profile retrieved");
+      "User profile retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve user profile", 500, (err as Error).message);
   }
@@ -92,13 +98,17 @@ export const getUserActivity = async (req: AdminRequest, res: Response): Promise
       .limit(30)
       .skip(skip);
 
-    sendSuccess(res, {
-      recentProgress,
-      recentAttempts: attempts,
-      recentCaseExplanations: cases,
-      recentResearch: research,
-      recentConversations: conversations,
-    }, "User activity retrieved");
+    sendSuccess(
+      res,
+      {
+        recentProgress,
+        recentAttempts: attempts,
+        recentCaseExplanations: cases,
+        recentResearch: research,
+        recentConversations: conversations,
+      },
+      "User activity retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve user activity", 500, (err as Error).message);
   }
@@ -110,10 +120,16 @@ export const getUserNotes = async (req: AdminRequest, res: Response): Promise<vo
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const user = await User.findById(req.params.id).select("_id");
-    if (!user) { sendNotFound(res, "User not found"); return; }
+    if (!user) {
+      sendNotFound(res, "User not found");
+      return;
+    }
 
     const [notes, total] = await Promise.all([
-      Note.find({ userId: user._id }).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      Note.find({ userId: user._id })
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       Note.countDocuments({ userId: user._id }),
     ]);
 
@@ -133,7 +149,10 @@ export const getUserAttempts = async (req: AdminRequest, res: Response): Promise
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const user = await User.findById(req.params.id).select("_id");
-    if (!user) { sendNotFound(res, "User not found"); return; }
+    if (!user) {
+      sendNotFound(res, "User not found");
+      return;
+    }
 
     const [attempts, total] = await Promise.all([
       QuestionAttempt.find({ userId: user._id })
@@ -160,7 +179,10 @@ export const getUserResearch = async (req: AdminRequest, res: Response): Promise
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const user = await User.findById(req.params.id).select("_id");
-    if (!user) { sendNotFound(res, "User not found"); return; }
+    if (!user) {
+      sendNotFound(res, "User not found");
+      return;
+    }
 
     const [sessions, total] = await Promise.all([
       ResearchSession.find({ userId: user._id })

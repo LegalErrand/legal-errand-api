@@ -3,7 +3,13 @@ import { AuthRequest } from "../types";
 import { Question, QuestionAttempt } from "../models/Question";
 import { gradingService } from "../services/ai/grading.service";
 import { Progress } from "../models/Progress";
-import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendError,
+} from "../utils/response";
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -18,7 +24,10 @@ export const getQuestions = async (req: AuthRequest, res: Response): Promise<voi
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [questions, total] = await Promise.all([
-      Question.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ createdAt: -1 }),
+      Question.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ createdAt: -1 }),
       Question.countDocuments(filter),
     ]);
 
@@ -31,7 +40,10 @@ export const getQuestions = async (req: AuthRequest, res: Response): Promise<voi
 export const getQuestion = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const question = await Question.findById(req.params.id);
-    if (!question) { sendNotFound(res, "Question not found"); return; }
+    if (!question) {
+      sendNotFound(res, "Question not found");
+      return;
+    }
     sendSuccess(res, question, "Question retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve question", 500, (err as Error).message);
@@ -48,7 +60,10 @@ export const getRandomQuestion = async (req: AuthRequest, res: Response): Promis
     if (type) filter.type = type;
 
     const count = await Question.countDocuments(filter);
-    if (count === 0) { sendNotFound(res, "No questions found for the given filters"); return; }
+    if (count === 0) {
+      sendNotFound(res, "No questions found for the given filters");
+      return;
+    }
 
     const random = Math.floor(Math.random() * count);
     const question = await Question.findOne(filter).skip(random);
@@ -62,10 +77,16 @@ export const getRandomQuestion = async (req: AuthRequest, res: Response): Promis
 export const submitAnswer = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { answer } = req.body;
-    if (!answer) { sendBadRequest(res, "Answer is required"); return; }
+    if (!answer) {
+      sendBadRequest(res, "Answer is required");
+      return;
+    }
 
     const question = await Question.findById(req.params.id);
-    if (!question) { sendNotFound(res, "Question not found"); return; }
+    if (!question) {
+      sendNotFound(res, "Question not found");
+      return;
+    }
 
     const result = await gradingService.gradeAnswer(
       question.prompt,
@@ -131,16 +152,13 @@ export const getStats = async (req: AuthRequest, res: Response): Promise<void> =
   try {
     const userId = req.user!.userId;
 
-    const attempts = await QuestionAttempt.find({ userId })
-      .populate<{ questionId: { subject: string; difficulty: string; type: string } }>(
-        "questionId",
-        "subject difficulty type"
-      );
+    const attempts = await QuestionAttempt.find({ userId }).populate<{
+      questionId: { subject: string; difficulty: string; type: string };
+    }>("questionId", "subject difficulty type");
 
     const total = attempts.length;
-    const averageScore = total > 0
-      ? Math.round(attempts.reduce((sum, a) => sum + a.scores.total, 0) / total)
-      : 0;
+    const averageScore =
+      total > 0 ? Math.round(attempts.reduce((sum, a) => sum + a.scores.total, 0) / total) : 0;
 
     const bySubject: Record<string, { count: number; avgScore: number }> = {};
     const byDifficulty: Record<string, number> = {};

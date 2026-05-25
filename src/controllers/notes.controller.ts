@@ -3,7 +3,13 @@ import { AuthRequest } from "../types";
 import { Note } from "../models/Note";
 import { deepseekService } from "../services/ai/deepseek.service";
 import { Progress } from "../models/Progress";
-import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendError,
+} from "../utils/response";
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -21,9 +27,11 @@ const NOTE_TEMPLATES = [
   {
     id: "irac",
     name: "IRAC Framework",
-    description: "Master the standard method for legal analysis: Issue, Rule, Application, and Conclusion.",
+    description:
+      "Master the standard method for legal analysis: Issue, Rule, Application, and Conclusion.",
     category: "ACADEMIC",
-    content: "<h2>Issue</h2><p>State the legal question...</p><h2>Rule</h2><p>State the applicable law...</p><h2>Application</h2><p>Apply the law to the facts...</p><h2>Conclusion</h2><p>State your conclusion...</p>",
+    content:
+      "<h2>Issue</h2><p>State the legal question...</p><h2>Rule</h2><p>State the applicable law...</p><h2>Application</h2><p>Apply the law to the facts...</p><h2>Conclusion</h2><p>State your conclusion...</p>",
     tags: ["irac", "analysis"],
   },
   {
@@ -31,7 +39,8 @@ const NOTE_TEMPLATES = [
     name: "Case Brief",
     description: "Summarize judicial opinions, procedural history, and core legal holdings.",
     category: "RESEARCH",
-    content: "<h2>Citation</h2><p></p><h2>Facts</h2><p></p><h2>Issue</h2><p></p><h2>Holding</h2><p></p><h2>Reasoning</h2><p></p><h2>Significance</h2><p></p>",
+    content:
+      "<h2>Citation</h2><p></p><h2>Facts</h2><p></p><h2>Issue</h2><p></p><h2>Holding</h2><p></p><h2>Reasoning</h2><p></p><h2>Significance</h2><p></p>",
     tags: ["case", "brief"],
   },
   {
@@ -39,15 +48,18 @@ const NOTE_TEMPLATES = [
     name: "Statute Summary",
     description: "Concise breakdown of legislative Acts, provisions and effective dates.",
     category: "COMPLIANCE",
-    content: "<h2>Act / Statute</h2><p></p><h2>Key Provisions</h2><ul><li></li></ul><h2>Effective Date</h2><p></p><h2>Relevance</h2><p></p>",
+    content:
+      "<h2>Act / Statute</h2><p></p><h2>Key Provisions</h2><ul><li></li></ul><h2>Effective Date</h2><p></p><h2>Relevance</h2><p></p>",
     tags: ["statute", "legislation"],
   },
   {
     id: "research_memo",
     name: "Research Memo",
-    description: "Draft internal office memo with proper citation, legal questions, and actionable insights.",
+    description:
+      "Draft internal office memo with proper citation, legal questions, and actionable insights.",
     category: "INTERNAL",
-    content: "<h2>Research Question</h2><p></p><h2>Summary of Law</h2><p></p><h2>Key Cases</h2><ul><li></li></ul><h2>Key Statutes</h2><ul><li></li></ul><h2>Analysis</h2><p></p><h2>Conclusion</h2><p></p>",
+    content:
+      "<h2>Research Question</h2><p></p><h2>Summary of Law</h2><p></p><h2>Key Cases</h2><ul><li></li></ul><h2>Key Statutes</h2><ul><li></li></ul><h2>Analysis</h2><p></p><h2>Conclusion</h2><p></p>",
     tags: ["memo", "research"],
   },
   {
@@ -55,7 +67,8 @@ const NOTE_TEMPLATES = [
     name: "Lecture Note",
     description: "Streamlined layout for law school lectures or legal seminar tracking.",
     category: "EDUCATION",
-    content: "<h2>Topic</h2><p></p><h2>Key Concepts</h2><ul><li></li></ul><h2>Cases Mentioned</h2><ul><li></li></ul><h2>Questions to Follow Up</h2><ul><li></li></ul>",
+    content:
+      "<h2>Topic</h2><p></p><h2>Key Concepts</h2><ul><li></li></ul><h2>Cases Mentioned</h2><ul><li></li></ul><h2>Questions to Follow Up</h2><ul><li></li></ul>",
     tags: ["lecture", "study"],
   },
 ];
@@ -74,7 +87,10 @@ export const getNotes = async (req: AuthRequest, res: Response): Promise<void> =
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const [notes, total] = await Promise.all([
-      Note.find(filter).skip(skip).limit(parseInt(limit as string)).sort({ updatedAt: -1 }),
+      Note.find(filter)
+        .skip(skip)
+        .limit(parseInt(limit as string))
+        .sort({ updatedAt: -1 }),
       Note.countDocuments(filter),
     ]);
 
@@ -87,7 +103,10 @@ export const getNotes = async (req: AuthRequest, res: Response): Promise<void> =
 export const getNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
     sendSuccess(res, note, "Note retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve note", 500, (err as Error).message);
@@ -97,11 +116,21 @@ export const getNote = async (req: AuthRequest, res: Response): Promise<void> =>
 export const createNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { title, content, subject, tags, source, sourceRef, folder, linkedDocumentId } = req.body;
-    if (!title || !content) { sendBadRequest(res, "Title and content are required"); return; }
+    if (!title || !content) {
+      sendBadRequest(res, "Title and content are required");
+      return;
+    }
 
     const note = await Note.create({
       userId: req.user!.userId,
-      title, content, subject, tags, source, sourceRef, folder, linkedDocumentId,
+      title,
+      content,
+      subject,
+      tags,
+      source,
+      sourceRef,
+      folder,
+      linkedDocumentId,
     });
 
     await Progress.findOneAndUpdate(
@@ -119,7 +148,10 @@ export const createNote = async (req: AuthRequest, res: Response): Promise<void>
 export const updateNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
 
     Object.assign(note, req.body);
     await note.save();
@@ -133,7 +165,10 @@ export const updateNote = async (req: AuthRequest, res: Response): Promise<void>
 export const deleteNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOneAndDelete({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
     sendSuccess(res, null, "Note deleted");
   } catch (err) {
     sendError(res, "Failed to delete note", 500, (err as Error).message);
@@ -145,7 +180,10 @@ export const deleteNote = async (req: AuthRequest, res: Response): Promise<void>
 export const analyzeNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
 
     const prompt = `Analyze this law student's note and return a JSON quality assessment:
 {
@@ -187,7 +225,10 @@ ${note.content.replace(/<[^>]+>/g, "")}`;
 export const summarizeNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
 
     const plainText = note.content.replace(/<[^>]+>/g, "");
     const summary = await deepseekService.chat(
@@ -205,7 +246,10 @@ export const summarizeNote = async (req: AuthRequest, res: Response): Promise<vo
 export const expandNote = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
 
     const plainText = note.content.replace(/<[^>]+>/g, "");
     const expanded = await deepseekService.chat(
@@ -223,7 +267,10 @@ export const expandNote = async (req: AuthRequest, res: Response): Promise<void>
 export const getRelatedNotes = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const note = await Note.findOne({ _id: req.params.id, userId: req.user!.userId });
-    if (!note) { sendNotFound(res, "Note not found"); return; }
+    if (!note) {
+      sendNotFound(res, "Note not found");
+      return;
+    }
 
     // Find notes sharing tags or subject — simple semantic grouping without vector DB
     const filter: Record<string, unknown> = {

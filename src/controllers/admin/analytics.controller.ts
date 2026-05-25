@@ -57,33 +57,38 @@ export const getOverview = async (_req: AdminRequest, res: Response): Promise<vo
       Waitlist.countDocuments(),
     ]);
 
-    sendSuccess(res, {
-      users: {
-        total: totalUsers,
-        activeThisMonth: activeUsers30d,
-        activeThisWeek: activeUsers7d,
-        newToday: newUsersToday,
-        verified: verifiedUsers,
-        premium: premiumUsers,
-        blocked: blockedUsers,
-        conversionRate: totalUsers > 0 ? ((premiumUsers / totalUsers) * 100).toFixed(1) + "%" : "0%",
+    sendSuccess(
+      res,
+      {
+        users: {
+          total: totalUsers,
+          activeThisMonth: activeUsers30d,
+          activeThisWeek: activeUsers7d,
+          newToday: newUsersToday,
+          verified: verifiedUsers,
+          premium: premiumUsers,
+          blocked: blockedUsers,
+          conversionRate:
+            totalUsers > 0 ? ((premiumUsers / totalUsers) * 100).toFixed(1) + "%" : "0%",
+        },
+        content: {
+          totalDocuments,
+          libraryDocuments,
+          userUploads,
+          totalQuestions,
+          activeQuestions,
+        },
+        activity: {
+          totalQuestionAttempts: totalAttempts,
+          attemptsToday,
+          totalResearchSessions,
+          totalAiConversations: totalConversations,
+          totalCaseExplanations,
+        },
+        waitlist: { total: totalWaitlist },
       },
-      content: {
-        totalDocuments,
-        libraryDocuments,
-        userUploads,
-        totalQuestions,
-        activeQuestions,
-      },
-      activity: {
-        totalQuestionAttempts: totalAttempts,
-        attemptsToday,
-        totalResearchSessions,
-        totalAiConversations: totalConversations,
-        totalCaseExplanations,
-      },
-      waitlist: { total: totalWaitlist },
-    }, "Platform overview retrieved");
+      "Platform overview retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve overview", 500, (err as Error).message);
   }
@@ -112,9 +117,7 @@ export const getUserGrowth = async (req: AdminRequest, res: Response): Promise<v
       { $group: { _id: "$accountType", count: { $sum: 1 } } },
     ]);
 
-    const byTier = await User.aggregate([
-      { $group: { _id: "$tier", count: { $sum: 1 } } },
-    ]);
+    const byTier = await User.aggregate([{ $group: { _id: "$tier", count: { $sum: 1 } } }]);
 
     const byCountry = await User.aggregate([
       { $match: { country: { $exists: true, $ne: null } } },
@@ -152,7 +155,19 @@ export const getUsageStats = async (req: AdminRequest, res: Response): Promise<v
           },
         },
         { $sort: { _id: 1 } },
-        { $project: { date: "$_id", _id: 0, totalStudyMinutes: 1, totalAiQueries: 1, totalCasesExplained: 1, totalNotesCreated: 1, totalQuestionsAnswered: 1, totalResearchSessions: 1, activeUsers: 1 } },
+        {
+          $project: {
+            date: "$_id",
+            _id: 0,
+            totalStudyMinutes: 1,
+            totalAiQueries: 1,
+            totalCasesExplained: 1,
+            totalNotesCreated: 1,
+            totalQuestionsAnswered: 1,
+            totalResearchSessions: 1,
+            activeUsers: 1,
+          },
+        },
       ]),
       User.find({ studyStreak: { $gt: 0 } })
         .select("firstName lastName email studyStreak")
@@ -173,12 +188,16 @@ export const getUsageStats = async (req: AdminRequest, res: Response): Promise<v
       ]),
     ]);
 
-    sendSuccess(res, {
-      period,
-      daily: dailyProgress,
-      topStudyStreaks,
-      avgQuestionScores: avgScores[0] || null,
-    }, "Usage stats retrieved");
+    sendSuccess(
+      res,
+      {
+        period,
+        daily: dailyProgress,
+        topStudyStreaks,
+        avgQuestionScores: avgScores[0] || null,
+      },
+      "Usage stats retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve usage stats", 500, (err as Error).message);
   }
@@ -186,57 +205,68 @@ export const getUsageStats = async (req: AdminRequest, res: Response): Promise<v
 
 export const getSubjectStats = async (_req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const [questionsBySubject, attemptsBySubject, documentsBySubject, avgScoreBySubject] = await Promise.all([
-      Question.aggregate([
-        { $group: { _id: "$subject", total: { $sum: 1 }, active: { $sum: { $cond: ["$isActive", 1, 0] } } } },
-        { $sort: { total: -1 } },
-      ]),
-      QuestionAttempt.aggregate([
-        {
-          $lookup: {
-            from: "questions",
-            localField: "questionId",
-            foreignField: "_id",
-            as: "question",
+    const [questionsBySubject, attemptsBySubject, documentsBySubject, avgScoreBySubject] =
+      await Promise.all([
+        Question.aggregate([
+          {
+            $group: {
+              _id: "$subject",
+              total: { $sum: 1 },
+              active: { $sum: { $cond: ["$isActive", 1, 0] } },
+            },
           },
-        },
-        { $unwind: "$question" },
-        {
-          $group: {
-            _id: "$question.subject",
-            attempts: { $sum: 1 },
-            avgScore: { $avg: "$scores.total" },
+          { $sort: { total: -1 } },
+        ]),
+        QuestionAttempt.aggregate([
+          {
+            $lookup: {
+              from: "questions",
+              localField: "questionId",
+              foreignField: "_id",
+              as: "question",
+            },
           },
-        },
-        { $sort: { attempts: -1 } },
-      ]),
-      LibraryDocument.aggregate([
-        { $match: { isLibraryContent: true, subject: { $exists: true } } },
-        { $group: { _id: "$subject", count: { $sum: 1 } } },
-        { $sort: { count: -1 } },
-      ]),
-      QuestionAttempt.aggregate([
-        {
-          $lookup: { from: "questions", localField: "questionId", foreignField: "_id", as: "q" },
-        },
-        { $unwind: "$q" },
-        {
-          $group: {
-            _id: { subject: "$q.subject", difficulty: "$q.difficulty" },
-            avgScore: { $avg: "$scores.total" },
-            count: { $sum: 1 },
+          { $unwind: "$question" },
+          {
+            $group: {
+              _id: "$question.subject",
+              attempts: { $sum: 1 },
+              avgScore: { $avg: "$scores.total" },
+            },
           },
-        },
-        { $sort: { "_id.subject": 1, "_id.difficulty": 1 } },
-      ]),
-    ]);
+          { $sort: { attempts: -1 } },
+        ]),
+        LibraryDocument.aggregate([
+          { $match: { isLibraryContent: true, subject: { $exists: true } } },
+          { $group: { _id: "$subject", count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+        ]),
+        QuestionAttempt.aggregate([
+          {
+            $lookup: { from: "questions", localField: "questionId", foreignField: "_id", as: "q" },
+          },
+          { $unwind: "$q" },
+          {
+            $group: {
+              _id: { subject: "$q.subject", difficulty: "$q.difficulty" },
+              avgScore: { $avg: "$scores.total" },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { "_id.subject": 1, "_id.difficulty": 1 } },
+        ]),
+      ]);
 
-    sendSuccess(res, {
-      questionsBySubject,
-      attemptsBySubject,
-      documentsBySubject,
-      avgScoreBySubjectAndDifficulty: avgScoreBySubject,
-    }, "Subject stats retrieved");
+    sendSuccess(
+      res,
+      {
+        questionsBySubject,
+        attemptsBySubject,
+        documentsBySubject,
+        avgScoreBySubjectAndDifficulty: avgScoreBySubject,
+      },
+      "Subject stats retrieved"
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve subject stats", 500, (err as Error).message);
   }

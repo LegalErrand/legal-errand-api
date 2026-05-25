@@ -49,7 +49,7 @@ export interface IDocument {
   s3Key: string;
   s3Url: string;
   fileSize: number;
-  uploadedBy?: Types.ObjectId;       // null = platform library
+  uploadedBy?: Types.ObjectId; // null = platform library
   isLibraryContent: boolean;
   metadata: {
     court?: string;
@@ -66,12 +66,12 @@ export interface INote {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
   title: string;
-  content: string;                   // rich text (HTML from Tiptap)
+  content: string; // rich text (HTML from Tiptap)
   subject?: LawSubject;
   tags: string[];
   source: NoteSource;
-  sourceRef?: string;                // document ID, case name, etc.
-  qualityScore?: number;             // 0–100, set by AI
+  sourceRef?: string; // document ID, case name, etc.
+  qualityScore?: number; // 0–100, set by AI
   folder?: string;
   linkedDocumentId?: Types.ObjectId;
   createdAt: Date;
@@ -144,7 +144,7 @@ export interface SocraticSession {
   messages: ConversationMessage[];
   hintsUsed: number;
   mode: "socratic" | "standard";
-  understanding?: number;            // 0–100
+  understanding?: number; // 0–100
 }
 
 // ─── Progress / Dashboard ────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export interface SocraticSession {
 export interface IProgressEntry {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
-  date: string;                      // YYYY-MM-DD
+  date: string; // YYYY-MM-DD
   studyMinutes: number;
   aiQueriesCount: number;
   casesExplained: number;

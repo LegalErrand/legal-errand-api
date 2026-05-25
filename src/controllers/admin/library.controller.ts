@@ -3,11 +3,25 @@ import { AdminRequest } from "../../types";
 import { LibraryDocument } from "../../models/Document";
 import { s3Service } from "../../services/storage/s3.service";
 import { DOCUMENT_TYPES, LAW_SUBJECTS } from "../../utils/constants";
-import { sendSuccess, sendCreated, sendBadRequest, sendNotFound, sendError } from "../../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendBadRequest,
+  sendNotFound,
+  sendError,
+} from "../../utils/response";
 
 export const listAllDocuments = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { page = "1", limit = "20", subject, type, isLibraryContent, uploadedBy, search } = req.query;
+    const {
+      page = "1",
+      limit = "20",
+      subject,
+      type,
+      isLibraryContent,
+      uploadedBy,
+      search,
+    } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const filter: Record<string, unknown> = {};
@@ -39,7 +53,10 @@ export const listAllDocuments = async (req: AdminRequest, res: Response): Promis
 
 export const getAnyDocument = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const doc = await LibraryDocument.findById(req.params.id).populate("uploadedBy", "firstName lastName email");
+    const doc = await LibraryDocument.findById(req.params.id).populate(
+      "uploadedBy",
+      "firstName lastName email"
+    );
     if (!doc) {
       sendNotFound(res, "Document not found");
       return;
@@ -73,7 +90,10 @@ export const updateAnyDocument = async (req: AdminRequest, res: Response): Promi
       return;
     }
 
-    const doc = await LibraryDocument.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    const doc = await LibraryDocument.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
     if (!doc) {
       sendNotFound(res, "Document not found");
       return;

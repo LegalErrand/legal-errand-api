@@ -5,14 +5,23 @@ import { LibraryDocument } from "../models/Document";
 import { Note } from "../models/Note";
 import { deepseekService } from "../services/ai/deepseek.service";
 import { Progress } from "../models/Progress";
-import { sendSuccess, sendCreated, sendNotFound, sendBadRequest, sendError } from "../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendNotFound,
+  sendBadRequest,
+  sendError,
+} from "../utils/response";
 
 const today = () => new Date().toISOString().split("T")[0];
 
 export const search = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { query, subject, type, jurisdiction, courtLevel } = req.body;
-    if (!query) { sendBadRequest(res, "Search query is required"); return; }
+    if (!query) {
+      sendBadRequest(res, "Search query is required");
+      return;
+    }
 
     const refinedQuery = await deepseekService.chat(
       `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`
@@ -41,17 +50,18 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
       whyRelevant: string;
     }
 
-    const rankedResults = results.length > 0
-      ? await deepseekService.structuredCompletion<{ results: RankedResult[] }>(
-          `For the research query: "${refinedQuery}", rank and annotate these Nigerian legal sources by relevance.
+    const rankedResults =
+      results.length > 0
+        ? await deepseekService.structuredCompletion<{ results: RankedResult[] }>(
+            `For the research query: "${refinedQuery}", rank and annotate these Nigerian legal sources by relevance.
 Sources: ${JSON.stringify(results.map((r) => ({ title: r.title, type: r.type, subject: r.subject })))}
 
 Return JSON:
 {
   "results": [{ "title": "<title>", "relevanceScore": <0-1>, "snippet": "<why this is relevant>", "whyRelevant": "<brief explanation>" }]
 }`
-        )
-      : { results: [] };
+          )
+        : { results: [] };
 
     const session = await ResearchSession.create({
       userId: req.user!.userId,
@@ -72,12 +82,16 @@ Return JSON:
       { upsert: true, new: true }
     );
 
-    sendCreated(res, {
-      sessionId: session._id,
-      refinedQuery,
-      results: rankedResults.results,
-      rawCount: results.length,
-    }, "Research results");
+    sendCreated(
+      res,
+      {
+        sessionId: session._id,
+        refinedQuery,
+        results: rankedResults.results,
+        rawCount: results.length,
+      },
+      "Research results"
+    );
   } catch (err) {
     sendError(res, "Research search failed", 500, (err as Error).message);
   }
@@ -89,7 +103,10 @@ export const generateMemo = async (req: AuthRequest, res: Response): Promise<voi
       _id: req.params.sessionId,
       userId: req.user!.userId,
     });
-    if (!session) { sendNotFound(res, "Research session not found"); return; }
+    if (!session) {
+      sendNotFound(res, "Research session not found");
+      return;
+    }
 
     const memo = await deepseekService.chat(
       `Generate a structured Nigerian legal research memo based on these findings:
@@ -136,7 +153,10 @@ export const getSession = async (req: AuthRequest, res: Response): Promise<void>
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!session) { sendNotFound(res, "Session not found"); return; }
+    if (!session) {
+      sendNotFound(res, "Session not found");
+      return;
+    }
     sendSuccess(res, session, "Session retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve session", 500, (err as Error).message);
@@ -149,13 +169,19 @@ export const saveResultToNotes = async (req: AuthRequest, res: Response): Promis
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!session) { sendNotFound(res, "Research session not found"); return; }
+    if (!session) {
+      sendNotFound(res, "Research session not found");
+      return;
+    }
 
     const { resultIndex } = req.body;
     const idx = parseInt(resultIndex ?? "0");
     const result = session.results[idx];
 
-    if (!result) { sendBadRequest(res, "Result not found at given index"); return; }
+    if (!result) {
+      sendBadRequest(res, "Result not found at given index");
+      return;
+    }
 
     const noteContent = `
 <h2>${result.title}</h2>
@@ -191,7 +217,10 @@ export const deleteSession = async (req: AuthRequest, res: Response): Promise<vo
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!session) { sendNotFound(res, "Session not found"); return; }
+    if (!session) {
+      sendNotFound(res, "Session not found");
+      return;
+    }
     sendSuccess(res, null, "Research session deleted");
   } catch (err) {
     sendError(res, "Failed to delete session", 500, (err as Error).message);

@@ -7,7 +7,13 @@ import { Progress } from "../models/Progress";
 import { Note } from "../models/Note";
 import { CaseExplanation } from "../models/CaseExplanation";
 import { Conversation } from "../models/Conversation";
-import { sendSuccess, sendCreated, sendBadRequest, sendNotFound, sendError } from "../utils/response";
+import {
+  sendSuccess,
+  sendCreated,
+  sendBadRequest,
+  sendNotFound,
+  sendError,
+} from "../utils/response";
 import { v4 as uuidv4 } from "uuid";
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -17,11 +23,14 @@ const today = () => new Date().toISOString().split("T")[0];
 export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { message, sessionId, documentContext } = req.body;
-    if (!message) { sendBadRequest(res, "Message is required"); return; }
+    if (!message) {
+      sendBadRequest(res, "Message is required");
+      return;
+    }
 
     const isNew = !sessionId;
     const sid = sessionId ?? uuidv4();
-    const history = (await redisService.getConversation(sid) as ConversationMessage[]) ?? [];
+    const history = ((await redisService.getConversation(sid)) as ConversationMessage[]) ?? [];
 
     const systemContext = documentContext
       ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
@@ -73,11 +82,14 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
 
 export const streamChat = async (req: AuthRequest, res: Response): Promise<void> => {
   const { message, sessionId, documentContext } = req.body;
-  if (!message) { res.status(400).json({ success: false, message: "Message is required" }); return; }
+  if (!message) {
+    res.status(400).json({ success: false, message: "Message is required" });
+    return;
+  }
 
   const isNew = !sessionId;
   const sid = sessionId ?? uuidv4();
-  const history = (await redisService.getConversation(sid) as ConversationMessage[]) ?? [];
+  const history = ((await redisService.getConversation(sid)) as ConversationMessage[]) ?? [];
 
   const systemContext = documentContext
     ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
@@ -153,12 +165,12 @@ export const deleteConversation = async (req: AuthRequest, res: Response): Promi
     const { sessionId } = req.params;
 
     const convo = await Conversation.findOne({ sessionId, userId: req.user!.userId });
-    if (!convo) { sendNotFound(res, "Conversation not found"); return; }
+    if (!convo) {
+      sendNotFound(res, "Conversation not found");
+      return;
+    }
 
-    await Promise.all([
-      convo.deleteOne(),
-      redisService.del(`conv:${sessionId}`),
-    ]);
+    await Promise.all([convo.deleteOne(), redisService.del(`conv:${sessionId}`)]);
 
     sendSuccess(res, null, "Conversation deleted");
   } catch (err) {
@@ -171,7 +183,10 @@ export const deleteConversation = async (req: AuthRequest, res: Response): Promi
 export const explainCase = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { caseText, documentId } = req.body;
-    if (!caseText) { sendBadRequest(res, "Case text is required"); return; }
+    if (!caseText) {
+      sendBadRequest(res, "Case text is required");
+      return;
+    }
 
     const cacheKey = `case_explain:${Buffer.from(caseText.slice(0, 100)).toString("base64")}`;
     const cached = await redisService.get(cacheKey);
@@ -255,7 +270,10 @@ export const getCaseExplanation = async (req: AuthRequest, res: Response): Promi
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!explanation) { sendNotFound(res, "Case explanation not found"); return; }
+    if (!explanation) {
+      sendNotFound(res, "Case explanation not found");
+      return;
+    }
     sendSuccess(res, explanation, "Case explanation retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve case explanation", 500, (err as Error).message);
@@ -268,7 +286,10 @@ export const saveCaseToNotes = async (req: AuthRequest, res: Response): Promise<
       _id: req.params.id,
       userId: req.user!.userId,
     });
-    if (!explanation) { sendNotFound(res, "Case explanation not found"); return; }
+    if (!explanation) {
+      sendNotFound(res, "Case explanation not found");
+      return;
+    }
 
     const noteContent = `
 <h2>${explanation.citation || "Case Explanation"}</h2>
@@ -310,7 +331,10 @@ export const saveCaseToNotes = async (req: AuthRequest, res: Response): Promise<
 export const startSocraticSession = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { topic } = req.body;
-    if (!topic) { sendBadRequest(res, "Topic is required"); return; }
+    if (!topic) {
+      sendBadRequest(res, "Topic is required");
+      return;
+    }
 
     const sessionId = uuidv4();
     const openingQuestion = await socraticService.openingQuestion(topic);
@@ -344,7 +368,10 @@ export const startSocraticSession = async (req: AuthRequest, res: Response): Pro
 export const respondSocratic = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { sessionId, response: studentResponse, requestHint } = req.body;
-    if (!sessionId) { sendBadRequest(res, "sessionId is required"); return; }
+    if (!sessionId) {
+      sendBadRequest(res, "sessionId is required");
+      return;
+    }
 
     const session = await redisService.get<{
       messages: ConversationMessage[];
@@ -352,7 +379,10 @@ export const respondSocratic = async (req: AuthRequest, res: Response): Promise<
       topic: string;
     }>(`socratic:${sessionId}`);
 
-    if (!session) { sendBadRequest(res, "Session not found or expired"); return; }
+    if (!session) {
+      sendBadRequest(res, "Session not found or expired");
+      return;
+    }
 
     let aiResponse: string;
 
@@ -361,7 +391,10 @@ export const respondSocratic = async (req: AuthRequest, res: Response): Promise<
       aiResponse = await socraticService.provideHint(session.messages, hintsRemaining);
       session.hintsUsed += 1;
     } else {
-      if (!studentResponse) { sendBadRequest(res, "Response is required"); return; }
+      if (!studentResponse) {
+        sendBadRequest(res, "Response is required");
+        return;
+      }
       aiResponse = await socraticService.continueSession(session.messages, studentResponse);
       session.messages.push({ role: "user", content: studentResponse, timestamp: new Date() });
     }
@@ -386,7 +419,10 @@ export const endSocraticSession = async (req: AuthRequest, res: Response): Promi
     const session = await redisService.get<{ messages: ConversationMessage[]; topic: string }>(
       `socratic:${sessionId}`
     );
-    if (!session) { sendBadRequest(res, "Session not found"); return; }
+    if (!session) {
+      sendBadRequest(res, "Session not found");
+      return;
+    }
 
     const summary = await socraticService.generateSessionSummary(session.messages, session.topic);
     await redisService.del(`socratic:${sessionId}`);

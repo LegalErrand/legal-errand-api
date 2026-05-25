@@ -23,12 +23,17 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3001",
   "https://dev.legalerrand.com",
   "https://legalerrand.com",
+  "https://admin.legalerrand.com",
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || env.NODE_ENV === "development" || ALLOWED_ORIGINS.some((o) => originKey(o) === originKey(origin))) {
+      if (
+        !origin ||
+        env.NODE_ENV === "development" ||
+        ALLOWED_ORIGINS.some((o) => originKey(o) === originKey(origin))
+      ) {
         return callback(null, true);
       }
       callback(new Error(`Origin ${origin} not allowed`));

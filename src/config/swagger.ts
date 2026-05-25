@@ -41,10 +41,16 @@ const userSpec = {
     { name: "Health", description: "API status" },
     { name: "Auth", description: "Registration, login, OTP verification, password reset" },
     { name: "User", description: "Profile management, avatar, referrals" },
-    { name: "Library", description: "Browse the platform library and manage personal document uploads" },
+    {
+      name: "Library",
+      description: "Browse the platform library and manage personal document uploads",
+    },
     { name: "Notes", description: "Create and manage study notes with AI enhancement" },
     { name: "Questions", description: "Practice questions with AI IRAC grading" },
-    { name: "Dashboard", description: "Study stats, activity feed, goals, achievements, and reasoning score" },
+    {
+      name: "Dashboard",
+      description: "Study stats, activity feed, goals, achievements, and reasoning score",
+    },
     { name: "AI — Chat", description: "General AI legal assistant (standard and streaming)" },
     { name: "AI — Case Explainer", description: "Structured case breakdown with history" },
     { name: "AI — Socratic Tutor", description: "Guided Socratic questioning sessions" },
@@ -87,13 +93,35 @@ const adminSpec = {
   servers: SERVERS,
   tags: [
     { name: "Admin — Auth", description: "Admin login and session management" },
-    { name: "Super Admin — Admin Management", description: "Create, update, block, and delete admin accounts. Requires super_admin." },
-    { name: "Super Admin — User Management", description: "Full user CRUD and block controls. Requires super_admin." },
-    { name: "Analytics", description: "Platform-wide stats: users, usage, subjects. All admin roles." },
-    { name: "Question Bank", description: "Manage the practice question bank. Requires content_admin or super_admin." },
-    { name: "Library Management", description: "Manage platform library content. Requires content_admin or super_admin." },
-    { name: "Waitlist Management", description: "View and manage waitlist entries. All admin roles." },
-    { name: "Support", description: "Read-only user profile and activity views for support investigations. All admin roles." },
+    {
+      name: "Super Admin — Admin Management",
+      description: "Create, update, block, and delete admin accounts. Requires super_admin.",
+    },
+    {
+      name: "Super Admin — User Management",
+      description: "Full user CRUD and block controls. Requires super_admin.",
+    },
+    {
+      name: "Analytics",
+      description: "Platform-wide stats: users, usage, subjects. All admin roles.",
+    },
+    {
+      name: "Question Bank",
+      description: "Manage the practice question bank. Requires content_admin or super_admin.",
+    },
+    {
+      name: "Library Management",
+      description: "Manage platform library content. Requires content_admin or super_admin.",
+    },
+    {
+      name: "Waitlist Management",
+      description: "View and manage waitlist entries. All admin roles.",
+    },
+    {
+      name: "Support",
+      description:
+        "Read-only user profile and activity views for support investigations. All admin roles.",
+    },
   ],
   components: swaggerComponents,
   security: [{ bearerAuth: [] }],
@@ -128,7 +156,7 @@ export const setupSwagger = (app: Express) => {
   app.use(
     "/docs",
     swaggerUi.serveFiles(userSpec, {}),
-    swaggerUi.setup(userSpec, uiOptions("LegalErrand API Docs")),
+    swaggerUi.setup(userSpec, uiOptions("LegalErrand API Docs"))
   );
   app.get("/docs.json", (_req, res) => {
     res.setHeader("Content-Type", "application/json");
@@ -138,7 +166,7 @@ export const setupSwagger = (app: Express) => {
   app.use(
     "/admin-docs",
     swaggerUi.serveFiles(adminSpec, {}),
-    swaggerUi.setup(adminSpec, uiOptions("LegalErrand Admin API Docs")),
+    swaggerUi.setup(adminSpec, uiOptions("LegalErrand Admin API Docs"))
   );
   app.get("/admin-docs.json", (_req, res) => {
     res.setHeader("Content-Type", "application/json");

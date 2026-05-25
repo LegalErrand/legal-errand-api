@@ -17,11 +17,11 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get("/", getDashboard);                    // Full dashboard data
-router.get("/streak", getStreak);                 // Streak calendar
-router.get("/activity", getActivity);             // Paginated activity history
-router.get("/achievements", getAchievements);     // Badges & achievements
-router.get("/insights", getInsights);             // AI-generated study insights
+router.get("/", getDashboard); // Full dashboard data
+router.get("/streak", getStreak); // Streak calendar
+router.get("/activity", getActivity); // Paginated activity history
+router.get("/achievements", getAchievements); // Badges & achievements
+router.get("/insights", getInsights); // AI-generated study insights
 router.get("/reasoning-score", getReasoningScore); // Legal Reasoning Score
 
 // Study goals

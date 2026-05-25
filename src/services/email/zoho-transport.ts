@@ -5,27 +5,29 @@ import { logger } from "../../utils/logger";
 
 let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
 
-export const getZohoTransporter = (): nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null => {
-  const { ZOHO_SMTP_USER, ZOHO_SMTP_PASS, ZOHO_SMTP_HOST, ZOHO_SMTP_PORT, ZOHO_SMTP_SECURE } = env;
+export const getZohoTransporter =
+  (): nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null => {
+    const { ZOHO_SMTP_USER, ZOHO_SMTP_PASS, ZOHO_SMTP_HOST, ZOHO_SMTP_PORT, ZOHO_SMTP_SECURE } =
+      env;
 
-  if (!ZOHO_SMTP_USER || !ZOHO_SMTP_PASS) {
-    return null;
-  }
+    if (!ZOHO_SMTP_USER || !ZOHO_SMTP_PASS) {
+      return null;
+    }
 
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: ZOHO_SMTP_HOST,
-      port: Number(ZOHO_SMTP_PORT),
-      secure: ZOHO_SMTP_SECURE === "true",
-      auth: {
-        user: ZOHO_SMTP_USER,
-        pass: ZOHO_SMTP_PASS,
-      },
-    });
-  }
+    if (!transporter) {
+      transporter = nodemailer.createTransport({
+        host: ZOHO_SMTP_HOST,
+        port: Number(ZOHO_SMTP_PORT),
+        secure: ZOHO_SMTP_SECURE === "true",
+        auth: {
+          user: ZOHO_SMTP_USER,
+          pass: ZOHO_SMTP_PASS,
+        },
+      });
+    }
 
-  return transporter;
-};
+    return transporter;
+  };
 
 export const sendZohoMail = async (options: {
   to: string;
@@ -37,7 +39,9 @@ export const sendZohoMail = async (options: {
   const from = options.from ?? env.ZOHO_MAIL_FROM;
 
   if (!transport || !from) {
-    logger.warn("Zoho SMTP not configured (ZOHO_SMTP_USER, ZOHO_SMTP_PASS, or ZOHO_MAIL_FROM missing)");
+    logger.warn(
+      "Zoho SMTP not configured (ZOHO_SMTP_USER, ZOHO_SMTP_PASS, or ZOHO_MAIL_FROM missing)"
+    );
     return false;
   }
 
