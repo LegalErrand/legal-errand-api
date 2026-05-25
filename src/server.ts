@@ -31,15 +31,17 @@ const start = async () => {
   process.on("SIGINT", () => shutdown("SIGINT"));
 
   process.on("unhandledRejection", (reason) => {
-    logger.error("Unhandled Rejection:", reason);
+    logger.logError("Unhandled promise rejection", reason);
     shutdown("UnhandledRejection");
+  });
+
+  process.on("uncaughtException", (err) => {
+    logger.logError("Uncaught exception", err);
+    shutdown("UncaughtException");
   });
 };
 
 start().catch((err) => {
-  const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error ? err.stack : undefined;
-  logger.error(`Failed to start server: ${message}`);
-  if (stack) logger.error(stack);
+  logger.logError("Failed to start server", err);
   process.exit(1);
 });

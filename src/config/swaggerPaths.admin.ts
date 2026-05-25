@@ -6,7 +6,8 @@ export const adminPaths: Record<string, unknown> = {
     post: {
       tags: ["Admin — Auth"],
       summary: "Admin login",
-      description: "Issues an 8-hour admin JWT. The token includes isAdmin: true and the admin's role.",
+      description:
+        "Issues an 8-hour admin JWT (`isAdmin: true`, `role` claim). Create the first super admin locally with `createSuperAdmin.ts` using `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` in `.env`.",
       security: [],
       requestBody: {
         required: true,
@@ -16,16 +17,41 @@ export const adminPaths: Record<string, unknown> = {
               type: "object",
               required: ["email", "password"],
               properties: {
-                email: { type: "string", example: "admin@legalerrand.com" },
-                password: { type: "string" },
+                email: { type: "string", format: "email", example: "admin@legalerrand.com" },
+                password: { type: "string", format: "password", example: "Admin@1234!" },
               },
             },
           },
         },
       },
       responses: {
-        "200": { description: "Login successful. Returns token and admin object." },
+        "200": {
+          description: "Login successful.",
+          content: {
+            "application/json": {
+              schema: {
+                allOf: [
+                  { $ref: "#/components/schemas/ApiSuccess" },
+                  {
+                    type: "object",
+                    properties: {
+                      data: {
+                        type: "object",
+                        properties: {
+                          token: { type: "string" },
+                          admin: { $ref: "#/components/schemas/AdminAccount" },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+        "400": { description: "Email and password are required." },
         "401": { description: "Invalid credentials or account suspended." },
+        "500": { description: "Login failed." },
       },
     },
   },

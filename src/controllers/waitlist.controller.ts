@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Waitlist } from "../models/Waitlist";
+import { logger } from "../utils/logger";
 
 export const joinWaitlist = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -28,7 +29,7 @@ export const joinWaitlist = async (req: Request, res: Response): Promise<void> =
       return;
     }
     
-    console.error("Waitlist error:", error);
+    logger.logError("Waitlist signup failed", error);
     res.status(500).json({ success: false, message: "Server error while joining waitlist" });
   }
 };

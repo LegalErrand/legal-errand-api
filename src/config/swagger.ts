@@ -4,16 +4,13 @@ import { env } from "./env";
 import { logger } from "../utils/logger";
 import { userPaths } from "./swaggerPaths.user";
 import { adminPaths } from "./swaggerPaths.admin";
+import { swaggerComponents } from "./swaggerComponents";
 
 const SERVERS = [
   { url: "https://api.legalerrand.com/api/v1", description: "Production" },
   { url: "https://dev-api.legalerrand.com/api/v1", description: "Development" },
   { url: `http://localhost:${env.PORT}/api/v1`, description: "Local" },
 ];
-
-const SECURITY_SCHEMES = {
-  bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-};
 
 // ─── User Spec ────────────────────────────────────────────────────────────────
 
@@ -31,6 +28,12 @@ const userSpec = {
       "",
       "### Rate Limits",
       "AI endpoints (chat, case explainer, research) are rate-limited by daily quota: **10 AI queries/day** and **5 research sessions/day** on the free tier.",
+      "",
+      "### Email (OTP)",
+      "Verification and password-reset OTPs are sent via **Zoho Mail SMTP** when `ZOHO_SMTP_*` env vars are configured. Email failures are logged server-side and do not block API responses.",
+      "",
+      "### Response shape",
+      "Most endpoints return `{ success, message, data?, meta? }`. Errors return `{ success: false, message }` (and optional `error` in development).",
     ].join("\n"),
   },
   servers: SERVERS,
@@ -48,7 +51,7 @@ const userSpec = {
     { name: "Research", description: "AI-powered legal research across the document library" },
     { name: "Waitlist", description: "Pre-launch waitlist signup" },
   ],
-  components: { securitySchemes: SECURITY_SCHEMES },
+  components: swaggerComponents,
   security: [{ bearerAuth: [] }],
   paths: userPaths,
 };
@@ -73,6 +76,12 @@ const adminSpec = {
       "| `super_admin` | Full access to all sections |",
       "| `content_admin` | Analytics (read), Question Bank, Library Management |",
       "| `support_admin` | Analytics (read), Waitlist (read), Support views |",
+      "",
+      "### Local super admin",
+      "Seed with `npx ts-node --transpile-only src/scripts/createSuperAdmin.ts` (uses `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` from `.env`).",
+      "",
+      "### Response shape",
+      "Same as the user API: `{ success, message, data?, meta? }`.",
     ].join("\n"),
   },
   servers: SERVERS,
@@ -86,7 +95,7 @@ const adminSpec = {
     { name: "Waitlist Management", description: "View and manage waitlist entries. All admin roles." },
     { name: "Support", description: "Read-only user profile and activity views for support investigations. All admin roles." },
   ],
-  components: { securitySchemes: SECURITY_SCHEMES },
+  components: swaggerComponents,
   security: [{ bearerAuth: [] }],
   paths: adminPaths,
 };

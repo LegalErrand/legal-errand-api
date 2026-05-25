@@ -17,7 +17,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Auth"],
       summary: "Register a new account",
-      description: "Creates an unverified account and sends a 6-digit OTP to the user's email.",
+      description:
+        "Creates an unverified account and sends a 6-digit OTP to the user's email via Zoho SMTP (when configured). Re-registering with the same unverified email overwrites the pending account and sends a new OTP.",
       security: [],
       requestBody: {
         required: true,
@@ -39,8 +40,16 @@ export const userPaths: Record<string, unknown> = {
         },
       },
       responses: {
-        "200": { description: "Account created. OTP sent to email." },
+        "200": {
+          description: "Account created. OTP sent to email.",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ApiSuccess" },
+            },
+          },
+        },
         "400": { description: "Missing required fields or email already verified." },
+        "500": { description: "Registration failed." },
       },
     },
   },
@@ -191,7 +200,8 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Auth"],
       summary: "Request password reset OTP",
-      description: "Always returns success to prevent email enumeration.",
+      description:
+        "Sends a password-reset OTP via Zoho SMTP when the email exists. Always returns success to prevent email enumeration.",
       security: [],
       requestBody: {
         required: true,
@@ -1172,12 +1182,12 @@ export const userPaths: Record<string, unknown> = {
     },
   },
 
-  "/research/sessions/{id}/memo": {
+  "/research/sessions/{sessionId}/memo": {
     post: {
       tags: ["Research"],
       summary: "Generate a research memo",
       description: "AI generates a structured legal research memo from the session results.",
-      parameters: [{ in: "path", name: "id", required: true, schema: { type: "string" } }],
+      parameters: [{ in: "path", name: "sessionId", required: true, schema: { type: "string" } }],
       responses: { "200": { description: "Returns memo text saved on the session." } },
     },
   },
@@ -1209,6 +1219,7 @@ export const userPaths: Record<string, unknown> = {
     post: {
       tags: ["Waitlist"],
       summary: "Join the waitlist",
+      description: "Public pre-launch signup. No authentication required.",
       security: [],
       requestBody: {
         required: true,
@@ -1218,10 +1229,10 @@ export const userPaths: Record<string, unknown> = {
               type: "object",
               required: ["firstName", "email", "universityName", "phone", "level", "country"],
               properties: {
-                firstName: { type: "string" },
-                email: { type: "string", format: "email" },
-                universityName: { type: "string" },
-                phone: { type: "string" },
+                firstName: { type: "string", example: "Adaobi" },
+                email: { type: "string", format: "email", example: "adaobi@unilag.edu.ng" },
+                universityName: { type: "string", example: "University of Lagos" },
+                phone: { type: "string", example: "+2348012345678" },
                 level: { type: "string", example: "400 Level" },
                 country: { type: "string", example: "Nigeria" },
               },
@@ -1230,8 +1241,23 @@ export const userPaths: Record<string, unknown> = {
         },
       },
       responses: {
-        "201": { description: "Added to waitlist successfully." },
-        "400": { description: "Email already on waitlist." },
+        "201": {
+          description: "Added to waitlist successfully.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: { type: "boolean", example: true },
+                  data: { $ref: "#/components/schemas/WaitlistEntry" },
+                },
+              },
+            },
+          },
+        },
+        "400": { description: "Missing required fields." },
+        "409": { description: "Email is already on the waitlist." },
+        "500": { description: "Server error while joining waitlist." },
       },
     },
   },

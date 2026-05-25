@@ -38,8 +38,13 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
   
-  // Resend Email
-  RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
+  // Zoho Mail SMTP (OTP + transactional email)
+  ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
+  ZOHO_SMTP_PORT: z.string().default("465"),
+  ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),
+  ZOHO_SMTP_USER: z.string().optional(),
+  ZOHO_SMTP_PASS: z.string().optional(),
+  ZOHO_MAIL_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
