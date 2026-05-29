@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { ApiMessage } from "./api-messages";
 import { logger } from "./logger";
 
 export interface ApiResponse<T = unknown> {
@@ -12,7 +13,7 @@ export interface ApiResponse<T = unknown> {
 export const sendSuccess = <T>(
   res: Response,
   data: T,
-  message = "Success",
+  message: string = ApiMessage.SUCCESS,
   statusCode = 200,
   meta?: Record<string, unknown>
 ): Response => {
@@ -49,21 +50,24 @@ export const sendError = (
 export const sendCreated = <T>(
   res: Response,
   data: T,
-  message = "Created successfully"
+  message: string = ApiMessage.SUCCESS
 ): Response => sendSuccess(res, data, message, 201);
 
-export const sendNotFound = (res: Response, message = "Resource not found"): Response =>
-  sendError(res, message, 404);
+export const sendNotFound = (
+  res: Response,
+  message: string = ApiMessage.RESOURCE_NOT_FOUND,
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 404, undefined, logContext);
 
 export const sendUnauthorized = (
   res: Response,
-  message = "Unauthorized",
+  message: string = ApiMessage.UNAUTHORIZED,
   logContext?: Record<string, unknown>
 ): Response => sendError(res, message, 401, undefined, logContext);
 
 export const sendForbidden = (
   res: Response,
-  message = "Forbidden",
+  message: string = ApiMessage.FORBIDDEN,
   logContext?: Record<string, unknown>
 ): Response => sendError(res, message, 403, undefined, logContext);
 

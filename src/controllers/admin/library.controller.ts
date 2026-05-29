@@ -163,7 +163,7 @@ export const deleteAnyDocument = async (req: AdminRequest, res: Response): Promi
       return;
     }
 
-    await s3Service.deleteFile(doc.s3Key);
+    if (doc.s3Key) await s3Service.deleteFile(doc.s3Key);
     await doc.deleteOne();
 
     sendSuccess(res, null, "Document deleted");
@@ -231,6 +231,11 @@ export const getDocumentSignedUrl = async (req: AdminRequest, res: Response): Pr
     const doc = await LibraryDocument.findById(req.params.id);
     if (!doc) {
       sendNotFound(res, "Document not found");
+      return;
+    }
+
+    if (!doc.s3Key) {
+      sendBadRequest(res, "This document has no associated file stored in S3");
       return;
     }
 

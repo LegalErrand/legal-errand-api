@@ -7,7 +7,9 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   res.on("finish", () => {
     const duration = Date.now() - start;
     const detail = res.locals.logDetail as string | undefined;
-    const line = `${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms${detail ? ` — ${detail}` : ""}`;
+    const requestId = res.locals.requestId as string | undefined;
+    const prefix = requestId ? `[${requestId}] ` : "";
+    const line = `${prefix}${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms${detail ? ` — ${detail}` : ""}`;
 
     if (res.statusCode >= 500) {
       logger.error(line);

@@ -3,7 +3,14 @@ import jwt from "jsonwebtoken";
 import { Admin } from "../../models/Admin";
 import { env } from "../../config/env";
 import { AdminRequest } from "../../types";
-import { sendSuccess, sendBadRequest, sendUnauthorized, sendError } from "../../utils/response";
+import { ApiMessage } from "../../utils/api-messages";
+import {
+  sendSuccess,
+  sendBadRequest,
+  sendUnauthorized,
+  sendNotFound,
+  sendError,
+} from "../../utils/response";
 import { logger } from "../../utils/logger";
 
 const signAdminToken = (adminId: string, email: string, role: string) =>
@@ -16,7 +23,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     const { email, password } = req.body;
 
     if (!email || !password) {
-      sendBadRequest(res, "Email and password are required", undefined, {
+      sendBadRequest(res, ApiMessage.EMAIL_AND_PASSWORD_REQUIRED, undefined, {
         route: "adminLogin",
         reason: "missing_fields",
       });
@@ -32,7 +39,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         reason: "no_account",
         hint: "Run: npx ts-node src/scripts/createSuperAdmin.ts",
       });
-      sendUnauthorized(res, "Invalid email or password", {
+      sendNotFound(res, ApiMessage.ADMIN_NOT_FOUND, {
         email: normalizedEmail,
         reason: "no_account",
       });
@@ -41,7 +48,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 
     if (!(await admin.comparePassword(password))) {
       logger.warn("Admin login failed", { email: normalizedEmail, reason: "invalid_password" });
-      sendUnauthorized(res, "Invalid email or password", {
+      sendUnauthorized(res, ApiMessage.INCORRECT_PASSWORD, {
         email: normalizedEmail,
         reason: "invalid_password",
       });
@@ -54,7 +61,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         reason: "account_suspended",
         blockedReason: admin.blockedReason,
       });
-      sendUnauthorized(res, "Your admin account has been suspended", {
+      sendUnauthorized(res, ApiMessage.ADMIN_ACCOUNT_SUSPENDED, {
         email: normalizedEmail,
         reason: "account_suspended",
       });
@@ -68,9 +75,9 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
     const adminObj = admin.toJSON();
 
     logger.info("Admin login successful", { email: admin.email, role: admin.role });
-    sendSuccess(res, { token, admin: adminObj }, "Login successful");
+    sendSuccess(res, { token, admin: adminObj }, ApiMessage.LOGIN_SUCCESS);
   } catch (err) {
-    sendError(res, "Login failed", 500, err, { route: "adminLogin" });
+    sendError(res, ApiMessage.LOGIN_FAILED, 500, err, { route: "adminLogin" });
   }
 };
 
@@ -78,15 +85,15 @@ export const getAdminMe = async (req: AdminRequest, res: Response): Promise<void
   try {
     const admin = await Admin.findById(req.admin!.adminId);
     if (!admin) {
-      sendUnauthorized(res, "Admin not found");
+      sendNotFound(res, ApiMessage.ADMIN_NOT_FOUND);
       return;
     }
-    sendSuccess(res, admin, "Profile retrieved");
+    sendSuccess(res, admin, ApiMessage.PROFILE_RETRIEVED);
   } catch (err) {
-    sendError(res, "Failed to retrieve profile", 500, (err as Error).message);
+    sendError(res, ApiMessage.PROFILE_RETRIEVE_FAILED, 500, err);
   }
 };
 
 export const adminLogout = (_req: AdminRequest, res: Response): void => {
-  sendSuccess(res, null, "Logged out successfully");
+  sendSuccess(res, null, ApiMessage.LOGOUT_SUCCESS);
 };

@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { ApiMessage } from "../utils/api-messages";
 import { logger } from "../utils/logger";
 import type { AdminRequest, AuthRequest } from "../types";
 
@@ -17,9 +18,11 @@ export class AppError extends Error {
 const requestContext = (req: Request): Record<string, unknown> => {
   const userReq = req as AuthRequest;
   const adminReq = req as AdminRequest;
+  const requestId = (req as Request & { requestId?: string }).requestId;
   return {
     method: req.method,
     path: req.originalUrl,
+    ...(requestId && { requestId }),
     ...(userReq.user?.userId && { userId: userReq.user.userId }),
     ...(adminReq.admin?.adminId && { adminId: adminReq.admin.adminId }),
   };
@@ -45,5 +48,5 @@ export const errorHandler = (
 
 export const notFoundHandler = (req: Request, res: Response): void => {
   logger.warn("Route not found", requestContext(req));
-  res.status(404).json({ success: false, message: "Route not found" });
+  res.status(404).json({ success: false, message: ApiMessage.ROUTE_NOT_FOUND });
 };

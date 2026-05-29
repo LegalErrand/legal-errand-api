@@ -2,12 +2,17 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { requestLogger } from "./middleware/logger.middleware";
+import { requestIdMiddleware } from "./middleware/requestId.middleware";
 import { env } from "./config/env";
 import { setupSwagger } from "./config/swagger";
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware";
 
 const app = express();
+
+// Render/Cloudflare/Load balancer: trust single proxy hop for correct req.ip/req.protocol
+app.set("trust proxy", 1);
+app.use(requestIdMiddleware);
 
 function originKey(origin: string): string {
   try {

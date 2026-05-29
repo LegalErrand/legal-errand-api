@@ -11,6 +11,18 @@ import {
   sendError,
 } from "../utils/response";
 
+/** Strip the raw bookmarks array and replace it with a per-user boolean. */
+function withBookmarkFlag(
+  doc: InstanceType<typeof LibraryDocument>,
+  userId: string
+): Record<string, unknown> {
+  const obj = doc.toObject() as unknown as Record<string, unknown>;
+  const bookmarks = doc.bookmarks as { toString(): string }[];
+  obj.isBookmarked = bookmarks.some((b) => b.toString() === userId);
+  delete obj.bookmarks;
+  return obj;
+}
+
 export const getLibrary = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { subject, type, page = "1", limit = "20", search } = req.query;
@@ -29,12 +41,19 @@ export const getLibrary = async (req: AuthRequest, res: Response): Promise<void>
       LibraryDocument.countDocuments(filter),
     ]);
 
-    sendSuccess(res, docs, "Library retrieved", 200, {
-      page: parseInt(page as string),
-      limit: parseInt(limit as string),
-      total,
-      totalPages: Math.ceil(total / parseInt(limit as string)),
-    });
+    const userId = req.user!.userId;
+    sendSuccess(
+      res,
+      docs.map((d) => withBookmarkFlag(d, userId)),
+      "Library retrieved",
+      200,
+      {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit as string)),
+      }
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve library", 500, (err as Error).message);
   }
@@ -59,7 +78,17 @@ export const getMyDocuments = async (req: AuthRequest, res: Response): Promise<v
       LibraryDocument.countDocuments(filter),
     ]);
 
-    sendSuccess(res, docs, "Documents retrieved", 200, { page: parseInt(page as string), total });
+    const userId = req.user!.userId;
+    sendSuccess(
+      res,
+      docs.map((d) => withBookmarkFlag(d, userId)),
+      "Documents retrieved",
+      200,
+      {
+        page: parseInt(page as string),
+        total,
+      }
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve documents", 500, (err as Error).message);
   }
@@ -73,13 +102,14 @@ export const getDocument = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const isOwner = doc.uploadedBy?.toString() === req.user!.userId;
+    const userId = req.user!.userId;
+    const isOwner = doc.uploadedBy?.toString() === userId;
     if (!doc.isLibraryContent && !isOwner) {
       res.status(403).json({ success: false, message: "Access denied" });
       return;
     }
 
-    sendSuccess(res, doc, "Document retrieved");
+    sendSuccess(res, withBookmarkFlag(doc, userId), "Document retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve document", 500, (err as Error).message);
   }
@@ -123,7 +153,12 @@ export const getBookmarks = async (req: AuthRequest, res: Response): Promise<voi
       LibraryDocument.countDocuments({ bookmarks: userId }),
     ]);
 
-    sendSuccess(res, docs, "Bookmarks retrieved", 200, { page: parseInt(page as string), total });
+    // All documents in the bookmarks list are bookmarked by definition
+    const transformed = docs.map((d) => withBookmarkFlag(d, userId.toString()));
+    sendSuccess(res, transformed, "Bookmarks retrieved", 200, {
+      page: parseInt(page as string),
+      total,
+    });
   } catch (err) {
     sendError(res, "Failed to retrieve bookmarks", 500, (err as Error).message);
   }
@@ -277,6 +312,11 @@ export const getDocumentSignedUrl = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
+    if (!doc.s3Key) {
+      sendBadRequest(res, "This document has no associated file stored in S3");
+      return;
+    }
+
     const signedUrl = await s3Service.getSignedDownloadUrl(doc.s3Key, 3600);
     sendSuccess(res, { signedUrl, expiresIn: 3600 }, "Signed URL generated");
   } catch (err) {
@@ -313,22 +353,21 @@ export const getPresignedUploadUrl = async (req: AuthRequest, res: Response): Pr
 
 export const bookmarkDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const doc = await LibraryDocument.findById(req.params.id);
+    const doc = await LibraryDocument.findById(req.params.id).select("bookmarks");
     if (!doc) {
       sendNotFound(res, "Document not found");
       return;
     }
 
-    const userId = req.user!.userId;
-    const isBookmarked = doc.bookmarks.some((b) => b.toString() === userId);
+    const userId = new Types.ObjectId(req.user!.userId);
+    const isBookmarked = doc.bookmarks.some((b) => b.equals(userId));
 
-    if (isBookmarked) {
-      doc.bookmarks = doc.bookmarks.filter((b) => b.toString() !== userId);
-    } else {
-      doc.bookmarks.push(new Types.ObjectId(userId));
-    }
+    // Use atomic operators to avoid triggering full-document validation
+    await LibraryDocument.findByIdAndUpdate(
+      doc._id,
+      isBookmarked ? { $pull: { bookmarks: userId } } : { $addToSet: { bookmarks: userId } }
+    );
 
-    await doc.save();
     sendSuccess(
       res,
       { bookmarked: !isBookmarked },
@@ -352,7 +391,7 @@ export const deleteDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    await s3Service.deleteFile(doc.s3Key);
+    if (doc.s3Key) await s3Service.deleteFile(doc.s3Key);
     await doc.deleteOne();
 
     sendSuccess(res, null, "Document deleted");

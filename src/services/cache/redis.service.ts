@@ -40,7 +40,7 @@ export const redisService = {
     }
   },
 
-  async incr(key: string, ttlSeconds = CACHE_TTL.DAILY_COUNT): Promise<number> {
+  async incr(key: string, ttlSeconds: number = CACHE_TTL.DAILY_COUNT): Promise<number> {
     try {
       const client = getRedis();
       if (!client) return 0;

@@ -18,7 +18,7 @@ const supportFrom = (): string =>
   env.ZOHO_MAIL_FROM ?? "LegalErrand Support <noreply@legalerrand.com>";
 
 export const emailService = {
-  async sendPasswordResetOtp(email: string, otp: string): Promise<void> {
+  async sendPasswordResetOtp(email: string, otp: string): Promise<boolean> {
     const ok = await sendZohoMail({
       from: supportFrom(),
       to: email,
@@ -33,10 +33,15 @@ export const emailService = {
           This code expires in 10 minutes. If you did not request a password reset, you can safely ignore this email.
         </p>`,
     });
-    if (ok) logger.info(`Password reset OTP email sent to ${email}`);
+    if (ok) {
+      logger.info(`[EMAIL] Password reset OTP sent to ${email}`);
+    } else {
+      logger.error(`[EMAIL] FAILED to send password reset OTP to ${email} — check SMTP config`);
+    }
+    return ok;
   },
 
-  async sendVerificationOtp(email: string, otp: string): Promise<void> {
+  async sendVerificationOtp(email: string, otp: string): Promise<boolean> {
     const ok = await sendZohoMail({
       from: supportFrom(),
       to: email,
@@ -51,6 +56,11 @@ export const emailService = {
           This code expires in 15 minutes.
         </p>`,
     });
-    if (ok) logger.info(`Verification OTP email sent to ${email}`);
+    if (ok) {
+      logger.info(`[EMAIL] Verification OTP sent to ${email}`);
+    } else {
+      logger.error(`[EMAIL] FAILED to send verification OTP to ${email} — check SMTP config`);
+    }
+    return ok;
   },
 };

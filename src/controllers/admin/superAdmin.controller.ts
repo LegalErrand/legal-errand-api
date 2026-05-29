@@ -2,6 +2,7 @@ import { Response } from "express";
 import { Admin, ADMIN_ROLES, AdminRole } from "../../models/Admin";
 import { User } from "../../models/User";
 import { AdminRequest } from "../../types";
+import { logger } from "../../utils/logger";
 import {
   sendSuccess,
   sendCreated,
@@ -44,6 +45,14 @@ export const createAdmin = async (req: AdminRequest, res: Response): Promise<voi
       password,
       role: role || "support_admin",
       createdBy: req.admin!.adminId,
+    });
+
+    logger.warn("Admin audit", {
+      action: "admin.create",
+      actorAdminId: req.admin!.adminId,
+      targetAdminId: admin._id?.toString?.() ?? String(admin._id),
+      targetEmail: admin.email,
+      role: admin.role,
     });
 
     sendCreated(res, admin, "Admin created successfully");
@@ -119,6 +128,13 @@ export const updateAdminRole = async (req: AdminRequest, res: Response): Promise
       return;
     }
 
+    logger.warn("Admin audit", {
+      action: "admin.updateRole",
+      actorAdminId: req.admin!.adminId,
+      targetAdminId: admin._id?.toString?.() ?? String(admin._id),
+      newRole: role,
+    });
+
     sendSuccess(res, admin, "Admin role updated");
   } catch (err) {
     sendError(res, "Failed to update admin role", 500, (err as Error).message);
@@ -153,6 +169,13 @@ export const blockAdmin = async (req: AdminRequest, res: Response): Promise<void
 
     await admin.save();
 
+    logger.warn("Admin audit", {
+      action: nowBlocking ? "admin.block" : "admin.unblock",
+      actorAdminId: req.admin!.adminId,
+      targetAdminId: admin._id?.toString?.() ?? String(admin._id),
+      reason: nowBlocking ? admin.blockedReason : undefined,
+    });
+
     sendSuccess(res, admin, nowBlocking ? "Admin blocked" : "Admin unblocked");
   } catch (err) {
     sendError(res, "Failed to update admin block status", 500, (err as Error).message);
@@ -177,6 +200,12 @@ export const resetAdminPassword = async (req: AdminRequest, res: Response): Prom
     admin.password = newPassword;
     await admin.save(); // pre-save hook hashes it
 
+    logger.warn("Admin audit", {
+      action: "admin.resetPassword",
+      actorAdminId: req.admin!.adminId,
+      targetAdminId: admin._id?.toString?.() ?? String(admin._id),
+    });
+
     sendSuccess(res, null, "Admin password reset successfully");
   } catch (err) {
     sendError(res, "Failed to reset admin password", 500, (err as Error).message);
@@ -195,6 +224,13 @@ export const deleteAdmin = async (req: AdminRequest, res: Response): Promise<voi
       sendNotFound(res, "Admin not found");
       return;
     }
+
+    logger.warn("Admin audit", {
+      action: "admin.delete",
+      actorAdminId: req.admin!.adminId,
+      targetAdminId: admin._id?.toString?.() ?? String(admin._id),
+      targetEmail: admin.email,
+    });
 
     sendSuccess(res, null, "Admin deleted successfully");
   } catch (err) {
@@ -292,6 +328,13 @@ export const updateUser = async (req: AdminRequest, res: Response): Promise<void
       return;
     }
 
+    logger.warn("Admin audit", {
+      action: "user.update",
+      actorAdminId: req.admin!.adminId,
+      targetUserId: user._id?.toString?.() ?? String(user._id),
+      updatedFields: Object.keys(updates),
+    });
+
     sendSuccess(res, user, "User updated successfully");
   } catch (err) {
     sendError(res, "Failed to update user", 500, (err as Error).message);
@@ -321,6 +364,13 @@ export const blockUser = async (req: AdminRequest, res: Response): Promise<void>
 
     await user.save();
 
+    logger.warn("Admin audit", {
+      action: nowBlocking ? "user.block" : "user.unblock",
+      actorAdminId: req.admin!.adminId,
+      targetUserId: user._id?.toString?.() ?? String(user._id),
+      reason: nowBlocking ? user.blockedReason : undefined,
+    });
+
     sendSuccess(res, user, nowBlocking ? "User blocked" : "User unblocked");
   } catch (err) {
     sendError(res, "Failed to update user block status", 500, (err as Error).message);
@@ -334,6 +384,13 @@ export const deleteUser = async (req: AdminRequest, res: Response): Promise<void
       sendNotFound(res, "User not found");
       return;
     }
+
+    logger.warn("Admin audit", {
+      action: "user.delete",
+      actorAdminId: req.admin!.adminId,
+      targetUserId: user._id?.toString?.() ?? String(user._id),
+      targetEmail: user.email,
+    });
 
     sendSuccess(res, null, "User deleted successfully");
   } catch (err) {
