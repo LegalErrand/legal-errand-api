@@ -17,7 +17,7 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Auth"],
       summary: "Register a new account",
       description:
-        "Creates an unverified account and sends a 6-digit OTP via Zoho SMTP (Resend fallback when configured). Re-registering with the same unverified email overwrites the pending account and sends a new OTP.",
+        "Creates an unverified account and sends a 6-digit OTP via ZeptoMail SMTP (Zoho/Resend fallback when configured). Re-registering with the same unverified email overwrites the pending account and sends a new OTP.",
       security: [],
       requestBody: {
         required: true,
@@ -215,7 +215,7 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Auth"],
       summary: "Request password reset OTP",
       description:
-        "Sends a password-reset OTP via Zoho SMTP (Resend fallback) when the user exists.",
+        "Sends a password-reset OTP via ZeptoMail SMTP (Zoho/Resend fallback) when the user exists.",
       security: [],
       requestBody: {
         required: true,

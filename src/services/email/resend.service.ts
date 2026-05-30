@@ -10,13 +10,7 @@ export const sendResendMail = async (options: {
   const apiKey = env.RESEND_API_KEY;
   const from = options.from ?? env.RESEND_FROM;
 
-  if (!apiKey) {
-    logger.warn("Resend not configured (RESEND_API_KEY missing)");
-    return false;
-  }
-
-  if (!from) {
-    logger.warn("Resend from address missing (RESEND_FROM or from option required)");
+  if (!apiKey || !from) {
     return false;
   }
 

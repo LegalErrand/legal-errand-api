@@ -9,7 +9,7 @@ REST API for LegalErrand Academy — an AI-native study platform for Nigerian la
 - **Cache:** Redis
 - **Storage:** AWS S3 (documents + avatars)
 - **AI:** DeepSeek (OpenAI-compatible — swap `DEEPSEEK_BASE_URL` to migrate)
-- **Email:** Zoho SMTP
+- **Email:** ZeptoMail SMTP (Zoho + Resend fallback)
 - **Docs:** Swagger UI at `/api-docs`
 
 ## Getting Started
@@ -73,7 +73,9 @@ REDIS_URL          Redis connection string
 JWT_SECRET         Min 32 characters
 DEEPSEEK_API_KEY   AI provider key
 AWS_S3_BUCKET      Document storage bucket
-ZOHO_SMTP_*        Email credentials
+ZEPTO_SMTP_*       ZeptoMail SMTP (primary)
+ZOHO_SMTP_*        Zoho fallback
+RESEND_*           Resend API fallback
 ```
 
 ## Conventions

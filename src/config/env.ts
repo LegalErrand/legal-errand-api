@@ -38,7 +38,15 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
 
-  // Zoho Mail SMTP (waitlist + OTP emails)
+  // ZeptoMail SMTP (primary — waitlist + OTP emails)
+  ZEPTO_SMTP_HOST: z.string().default("smtp.zeptomail.com"),
+  ZEPTO_SMTP_PORT: z.string().default("587"),
+  ZEPTO_SMTP_SECURE: z.enum(["true", "false"]).default("false"),
+  ZEPTO_SMTP_USER: z.string().default("emailapikey"),
+  ZEPTO_SMTP_PASS: z.string().optional(),
+  ZEPTO_MAIL_FROM: z.string().optional(),
+
+  // Zoho Mail SMTP (fallback)
   ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
   ZOHO_SMTP_PORT: z.string().default("465"),
   ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),
@@ -46,7 +54,7 @@ const envSchema = z.object({
   ZOHO_SMTP_PASS: z.string().optional(),
   ZOHO_MAIL_FROM: z.string().optional(),
 
-  // Resend (fallback when Zoho SMTP fails or is unset)
+  // Resend (fallback when SMTP providers fail or are unset)
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().optional(),
 });

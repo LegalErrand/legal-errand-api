@@ -5,23 +5,28 @@ import { logger } from "../../utils/logger";
 
 let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
 
-export const getZohoTransporter =
+export const getZeptoTransporter =
   (): nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null => {
-    const { ZOHO_SMTP_USER, ZOHO_SMTP_PASS, ZOHO_SMTP_HOST, ZOHO_SMTP_PORT, ZOHO_SMTP_SECURE } =
-      env;
+    const {
+      ZEPTO_SMTP_USER,
+      ZEPTO_SMTP_PASS,
+      ZEPTO_SMTP_HOST,
+      ZEPTO_SMTP_PORT,
+      ZEPTO_SMTP_SECURE,
+    } = env;
 
-    if (!ZOHO_SMTP_USER || !ZOHO_SMTP_PASS) {
+    if (!ZEPTO_SMTP_PASS) {
       return null;
     }
 
     if (!transporter) {
       transporter = nodemailer.createTransport({
-        host: ZOHO_SMTP_HOST,
-        port: Number(ZOHO_SMTP_PORT),
-        secure: ZOHO_SMTP_SECURE === "true",
+        host: ZEPTO_SMTP_HOST,
+        port: Number(ZEPTO_SMTP_PORT),
+        secure: ZEPTO_SMTP_SECURE === "true",
         auth: {
-          user: ZOHO_SMTP_USER,
-          pass: ZOHO_SMTP_PASS,
+          user: ZEPTO_SMTP_USER,
+          pass: ZEPTO_SMTP_PASS,
         },
       });
     }
@@ -29,14 +34,14 @@ export const getZohoTransporter =
     return transporter;
   };
 
-export const sendZohoMail = async (options: {
+export const sendZeptoMail = async (options: {
   to: string;
   subject: string;
   html: string;
   from?: string;
 }): Promise<boolean> => {
-  const transport = getZohoTransporter();
-  const from = options.from ?? env.ZOHO_MAIL_FROM;
+  const transport = getZeptoTransporter();
+  const from = options.from ?? env.ZEPTO_MAIL_FROM;
 
   if (!transport || !from) {
     return false;
@@ -51,7 +56,7 @@ export const sendZohoMail = async (options: {
     });
     return true;
   } catch (err) {
-    logger.error("Zoho SMTP send failed", {
+    logger.error("ZeptoMail SMTP send failed", {
       to: options.to,
       subject: options.subject,
       message: err instanceof Error ? err.message : String(err),

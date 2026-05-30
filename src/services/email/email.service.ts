@@ -1,5 +1,5 @@
 import { logger } from "../../utils/logger";
-import { defaultMailFrom, sendEmail } from "./mail-delivery";
+import { sendEmail } from "./mail-delivery";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -16,7 +16,6 @@ const otpEmailHtml = (title: string, body: string, otp: string): string => `
 export const emailService = {
   async sendPasswordResetOtp(email: string, otp: string): Promise<boolean> {
     const ok = await sendEmail({
-      from: defaultMailFrom(),
       to: email,
       subject: "Your LegalErrand Password Reset OTP",
       html:
@@ -33,7 +32,7 @@ export const emailService = {
       logger.info(`[EMAIL] Password reset OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send password reset OTP to ${email} — check Zoho/Resend config`
+        `[EMAIL] FAILED to send password reset OTP to ${email} — check Zepto/Zoho/Resend config`
       );
     }
     return ok;
@@ -41,7 +40,6 @@ export const emailService = {
 
   async sendVerificationOtp(email: string, otp: string): Promise<boolean> {
     const ok = await sendEmail({
-      from: defaultMailFrom(),
       to: email,
       subject: "Verify Your LegalErrand Account",
       html:
@@ -58,7 +56,7 @@ export const emailService = {
       logger.info(`[EMAIL] Verification OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send verification OTP to ${email} — check Zoho/Resend config`
+        `[EMAIL] FAILED to send verification OTP to ${email} — check Zepto/Zoho/Resend config`
       );
     }
     return ok;

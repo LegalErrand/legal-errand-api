@@ -1,9 +1,9 @@
 import { logger } from "../../utils/logger";
-import { defaultMailFrom, sendEmail } from "./mail-delivery";
+import { sendEmail } from "./mail-delivery";
 import { WAITLIST_EMAIL_SUBJECT, buildWaitlistEmailHtml } from "./waitlist-email.template";
 
 /**
- * Sends waitlist confirmation (Zoho SMTP first, Resend fallback).
+ * Sends waitlist confirmation (ZeptoMail → Zoho → Resend).
  * Never rethrows — callers must not surface email failures to the client.
  */
 export const sendWaitlistConfirmationEmail = async (
@@ -11,7 +11,6 @@ export const sendWaitlistConfirmationEmail = async (
   firstName?: string
 ): Promise<void> => {
   const ok = await sendEmail({
-    from: defaultMailFrom(),
     to,
     subject: WAITLIST_EMAIL_SUBJECT,
     html: buildWaitlistEmailHtml(firstName),
