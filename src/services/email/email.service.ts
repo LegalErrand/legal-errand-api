@@ -1,6 +1,5 @@
-import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
-import { sendZohoMail } from "./zoho-transport";
+import { defaultMailFrom, sendEmail } from "./mail-delivery";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -14,13 +13,10 @@ const otpEmailHtml = (title: string, body: string, otp: string): string => `
     </div>
   </div>`;
 
-const supportFrom = (): string =>
-  env.ZOHO_MAIL_FROM ?? "LegalErrand Support <noreply@legalerrand.com>";
-
 export const emailService = {
   async sendPasswordResetOtp(email: string, otp: string): Promise<boolean> {
-    const ok = await sendZohoMail({
-      from: supportFrom(),
+    const ok = await sendEmail({
+      from: defaultMailFrom(),
       to: email,
       subject: "Your LegalErrand Password Reset OTP",
       html:
@@ -36,14 +32,16 @@ export const emailService = {
     if (ok) {
       logger.info(`[EMAIL] Password reset OTP sent to ${email}`);
     } else {
-      logger.error(`[EMAIL] FAILED to send password reset OTP to ${email} — check SMTP config`);
+      logger.error(
+        `[EMAIL] FAILED to send password reset OTP to ${email} — check Zoho/Resend config`
+      );
     }
     return ok;
   },
 
   async sendVerificationOtp(email: string, otp: string): Promise<boolean> {
-    const ok = await sendZohoMail({
-      from: supportFrom(),
+    const ok = await sendEmail({
+      from: defaultMailFrom(),
       to: email,
       subject: "Verify Your LegalErrand Account",
       html:
@@ -59,7 +57,9 @@ export const emailService = {
     if (ok) {
       logger.info(`[EMAIL] Verification OTP sent to ${email}`);
     } else {
-      logger.error(`[EMAIL] FAILED to send verification OTP to ${email} — check SMTP config`);
+      logger.error(
+        `[EMAIL] FAILED to send verification OTP to ${email} — check Zoho/Resend config`
+      );
     }
     return ok;
   },

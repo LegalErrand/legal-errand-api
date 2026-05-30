@@ -45,6 +45,10 @@ const envSchema = z.object({
   ZOHO_SMTP_USER: z.string().optional(),
   ZOHO_SMTP_PASS: z.string().optional(),
   ZOHO_MAIL_FROM: z.string().optional(),
+
+  // Resend (fallback when Zoho SMTP fails or is unset)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
