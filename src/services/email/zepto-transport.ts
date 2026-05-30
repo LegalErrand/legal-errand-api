@@ -24,6 +24,9 @@ export const getZeptoTransporter =
         host: ZEPTO_SMTP_HOST,
         port: Number(ZEPTO_SMTP_PORT),
         secure: ZEPTO_SMTP_SECURE === "true",
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 15_000,
         auth: {
           user: ZEPTO_SMTP_USER,
           pass: ZEPTO_SMTP_PASS,

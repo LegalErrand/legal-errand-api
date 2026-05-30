@@ -1,6 +1,7 @@
 import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
 import { sendResendMail } from "./resend.service";
+import { isZeptoApiConfigured, sendZeptoApiMail } from "./zepto-api.service";
 import { sendZeptoMail } from "./zepto-transport";
 import { sendZohoMail } from "./zoho-transport";
 
@@ -10,7 +11,7 @@ export type MailOptions = {
   html: string;
 };
 
-const isZeptoConfigured = (): boolean => Boolean(env.ZEPTO_SMTP_PASS && env.ZEPTO_MAIL_FROM);
+const isZeptoSmtpConfigured = (): boolean => Boolean(env.ZEPTO_SMTP_PASS && env.ZEPTO_MAIL_FROM);
 
 const isZohoConfigured = (): boolean =>
   Boolean(env.ZOHO_SMTP_USER && env.ZOHO_SMTP_PASS && env.ZOHO_MAIL_FROM);
@@ -18,11 +19,11 @@ const isZohoConfigured = (): boolean =>
 const isResendConfigured = (): boolean => Boolean(env.RESEND_API_KEY && env.RESEND_FROM);
 
 const anyProviderConfigured = (): boolean =>
-  isZeptoConfigured() || isZohoConfigured() || isResendConfigured();
+  isZeptoSmtpConfigured() || isZeptoApiConfigured() || isZohoConfigured() || isResendConfigured();
 
 /**
- * Sends email: ZeptoMail SMTP (primary) → Zoho SMTP → Resend API.
- * Each provider uses its own verified `from` address.
+ * ZeptoMail SMTP → Zoho SMTP → ZeptoMail API → Resend.
+ * SMTP uses 10s connection timeouts (see zepto/zoho transports).
  */
 export const sendEmail = async (options: MailOptions): Promise<boolean> => {
   if (!anyProviderConfigured()) {
@@ -33,15 +34,13 @@ export const sendEmail = async (options: MailOptions): Promise<boolean> => {
     return false;
   }
 
-  if (isZeptoConfigured()) {
+  if (isZeptoSmtpConfigured()) {
     const zeptoOk = await sendZeptoMail({
       ...options,
       from: env.ZEPTO_MAIL_FROM!,
     });
-    if (zeptoOk) {
-      return true;
-    }
-    logger.warn("ZeptoMail send failed — trying fallback providers", {
+    if (zeptoOk) return true;
+    logger.warn("ZeptoMail SMTP failed — trying next provider", {
       to: options.to,
       subject: options.subject,
     });
@@ -53,20 +52,38 @@ export const sendEmail = async (options: MailOptions): Promise<boolean> => {
       from: env.ZOHO_MAIL_FROM!,
     });
     if (zohoOk) {
-      logger.info("Email delivered via Zoho (ZeptoMail fallback)", {
+      logger.info("Email delivered via Zoho SMTP", {
         to: options.to,
         subject: options.subject,
       });
       return true;
     }
-    logger.warn("Zoho send failed — trying Resend fallback", {
+    logger.warn("Zoho SMTP failed — trying next provider", {
+      to: options.to,
+      subject: options.subject,
+    });
+  }
+
+  if (isZeptoApiConfigured()) {
+    const zeptoApiOk = await sendZeptoApiMail({
+      ...options,
+      from: env.ZEPTO_MAIL_FROM!,
+    });
+    if (zeptoApiOk) {
+      logger.info("Email delivered via ZeptoMail API", {
+        to: options.to,
+        subject: options.subject,
+      });
+      return true;
+    }
+    logger.warn("ZeptoMail API failed — trying Resend fallback", {
       to: options.to,
       subject: options.subject,
     });
   }
 
   if (!isResendConfigured()) {
-    logger.error("Email delivery failed — no fallback provider succeeded", {
+    logger.error("Email delivery failed — no provider succeeded", {
       to: options.to,
       subject: options.subject,
     });
@@ -86,7 +103,7 @@ export const sendEmail = async (options: MailOptions): Promise<boolean> => {
     return true;
   }
 
-  logger.error("Email delivery failed (ZeptoMail, Zoho, and Resend)", {
+  logger.error("Email delivery failed (all providers)", {
     to: options.to,
     subject: options.subject,
   });
