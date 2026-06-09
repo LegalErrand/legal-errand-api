@@ -41,16 +41,13 @@ function scoreDocument(
 export const search = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { query, subject, type, jurisdiction, courtLevel } = req.body;
-    if (!query) {
-      sendBadRequest(res, "Search query is required");
-      return;
-    }
-
-    const terms = (query as string)
-      .toLowerCase()
-      .replace(/[^\w\s]/g, "")
-      .split(/\s+/)
-      .filter((t: string) => t.length > 2);
+    const terms = query
+      ? (query as string)
+          .toLowerCase()
+          .replace(/[^\w\s]/g, "")
+          .split(/\s+/)
+          .filter((t: string) => t.length > 2)
+      : [];
 
     const docFilter: Record<string, unknown> = { isLibraryContent: true };
     if (subject) docFilter.subject = subject;
@@ -58,76 +55,94 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
     if (jurisdiction) docFilter["metadata.jurisdiction"] = jurisdiction;
     if (courtLevel) docFilter["metadata.courtLevel"] = courtLevel;
 
-    // Primary: full-text search (MongoDB index); fallback to regex scan if no hits
-    let results = await LibraryDocument.find({
-      ...docFilter,
-      $text: { $search: query },
-    })
-      .select("title type subject metadata s3Url")
-      .limit(20)
-      .lean();
-
-    if (results.length === 0) {
-      // Fallback: regex match on title / description when text index has no hits
-      const regexTerms = terms.map((t: string) => new RegExp(t, "i"));
+    let results;
+    if (!query || terms.length === 0) {
+      // No query — return latest documents
+      results = await LibraryDocument.find(docFilter)
+        .select("title type subject metadata s3Url")
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+    } else {
+      // Primary: full-text search (MongoDB index); fallback to regex scan if no hits
       results = await LibraryDocument.find({
         ...docFilter,
-        $or: [
-          { title: { $in: regexTerms } },
-          { "metadata.description": { $in: regexTerms } },
-        ],
+        $text: { $search: query },
       })
         .select("title type subject metadata s3Url")
-        .limit(20)
+        .limit(50)
         .lean();
+
+      if (results.length === 0) {
+        const regexTerms = terms.map((t: string) => new RegExp(t, "i"));
+        results = await LibraryDocument.find({
+          ...docFilter,
+          $or: [
+            { title: { $in: regexTerms } },
+            { "metadata.description": { $in: regexTerms } },
+          ],
+        })
+          .select("title type subject metadata s3Url")
+          .limit(50)
+          .lean();
+      }
     }
 
     // Algorithm: score and sort results locally
     const scored = results
       .map((doc) => ({ doc, score: scoreDocument(doc, terms) }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 10);
+      .slice(0, 50);
 
     interface AlgoResult {
+      documentId: unknown;
       title: string;
       relevanceScore: number;
       snippet: string;
       type: string;
+      courtLevel?: string;
+      citation?: string;
     }
 
     const algoResults: AlgoResult[] = scored.map(({ doc, score }) => ({
+      documentId: doc._id,
       title: doc.title,
       relevanceScore: parseFloat(Math.min(score, 1).toFixed(2)),
       snippet: doc.metadata?.description ?? `${doc.type} — ${doc.subject ?? "Legal document"}`,
       type: doc.type,
+      courtLevel: doc.metadata?.courtLevel,
+      citation: doc.metadata?.citation,
     }));
 
-    // Save session with algorithm results immediately
-    const session = await ResearchSession.create({
-      userId: req.user!.userId,
-      query,
-      refinedQuery: query,
-      results: scored.map(({ doc, score }, i) => ({
-        documentId: doc._id,
-        title: algoResults[i].title,
-        snippet: algoResults[i].snippet,
-        relevanceScore: algoResults[i].relevanceScore,
-        type: doc.type ?? "case_law",
-      })),
-    });
+    // Only persist a session when the user actually typed a query
+    let sessionId: unknown = null;
+    if (query) {
+      const session = await ResearchSession.create({
+        userId: req.user!.userId,
+        query,
+        refinedQuery: query,
+        results: scored.map(({ doc, score }, i) => ({
+          documentId: doc._id,
+          title: algoResults[i].title,
+          snippet: algoResults[i].snippet,
+          relevanceScore: algoResults[i].relevanceScore,
+          type: doc.type ?? "case_law",
+        })),
+      });
+      sessionId = session._id;
 
-    await Progress.findOneAndUpdate(
-      { userId: req.user!.userId, date: today() },
-      { $inc: { researchSessions: 1 } },
-      { upsert: true, new: true }
-    );
+      await Progress.findOneAndUpdate(
+        { userId: req.user!.userId, date: today() },
+        { $inc: { researchSessions: 1 } },
+        { upsert: true, new: true }
+      );
+    }
 
-    // Respond immediately — don't block on DeepSeek
     sendCreated(
       res,
       {
-        sessionId: session._id,
-        refinedQuery: query,
+        sessionId,
+        refinedQuery: query ?? "",
         results: algoResults,
         rawCount: results.length,
       },
@@ -135,7 +150,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
     );
 
     // Fire-and-forget: let DeepSeek optionally improve the session (non-blocking)
-    if (results.length > 0) {
+    if (query && results.length > 0) {
       deepseekService
         .chat(
           `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`

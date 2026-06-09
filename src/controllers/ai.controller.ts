@@ -7,6 +7,9 @@ import { Progress } from "../models/Progress";
 import { Note } from "../models/Note";
 import { CaseExplanation } from "../models/CaseExplanation";
 import { Conversation } from "../models/Conversation";
+import { LibraryDocument } from "../models/Document";
+import { s3Client, S3_BUCKET } from "../config/s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   sendSuccess,
   sendCreated,
@@ -15,6 +18,16 @@ import {
   sendError,
 } from "../utils/response";
 import { v4 as uuidv4 } from "uuid";
+
+async function fetchDocumentText(s3Key: string): Promise<string> {
+  const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key });
+  const response = await s3Client.send(command);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf-8").slice(0, 15000);
+}
 
 const today = () => new Date().toISOString().split("T")[0];
 
@@ -32,9 +45,14 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
     const sid = sessionId ?? uuidv4();
     const history = ((await redisService.getConversation(sid)) as ConversationMessage[]) ?? [];
 
-    const systemContext = documentContext
-      ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
-      : undefined;
+    const systemContext = [
+      documentContext
+        ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
+        : null,
+      "Keep responses concise and conversational — 2 to 5 short paragraphs. Write in plain prose without markdown tables, headers, or bullet lists.",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     const reply = await deepseekService.chatWithHistory(
       [...history, { role: "user", content: message, timestamp: new Date() }],
@@ -182,9 +200,19 @@ export const deleteConversation = async (req: AuthRequest, res: Response): Promi
 
 export const explainCase = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { caseText, documentId } = req.body;
+    let { caseText, documentId } = req.body;
+
+    if (!caseText && documentId) {
+      const doc = await LibraryDocument.findById(documentId).lean();
+      if (!doc) {
+        sendBadRequest(res, "Document not found");
+        return;
+      }
+      caseText = await fetchDocumentText(doc.s3Key);
+    }
+
     if (!caseText) {
-      sendBadRequest(res, "Case text is required");
+      sendBadRequest(res, "Either caseText or documentId is required");
       return;
     }
 
@@ -196,17 +224,24 @@ export const explainCase = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const prompt = `Analyze and explain this case using the following structured format. Return a JSON object:
+    const prompt = `You are a senior Nigerian law lecturer. Analyze ONLY the case text provided below — do not invent or assume any facts not found in the text. Return a JSON object in exactly this structure:
+
 {
-  "citation": "<proper legal citation>",
-  "facts": "<simplified narrative of what happened>",
-  "issue": "<the legal question the court addressed>",
-  "holding": "<the court's decision>",
-  "reasoning": "<why the court decided this way — legal principles applied>",
-  "significance": "<why this case matters — precedent value>",
-  "relatedCases": ["<case 1>", "<case 2>"],
-  "practiceQuestions": ["<question 1>", "<question 2>", "<question 3>"]
+  "citation": "<Extract the exact legal citation from the text, e.g. 'Donoghue v Stevenson [1932] AC 562'. If not found, write 'Citation not available'.>",
+  "facts": "<Plain-English summary of what happened — who the parties are, what dispute arose, and what happened procedurally. Only facts explicitly stated in the text.>",
+  "issue": "<The precise legal question(s) the court had to decide. Quote from the text where possible.>",
+  "holding": "<The court's actual decision — who won and on what ground. Only state what is in the text.>",
+  "reasoning": "<The legal principles, statutes, and precedents the court applied to reach its decision. Only reference materials explicitly mentioned in the text.>",
+  "significance": "<Why this case matters as precedent — what rule of law it established or confirmed.>",
+  "relatedCases": ["<Only include cases explicitly cited within the provided text. If none are cited, return an empty array.>"],
+  "practiceQuestions": ["<3 original exam-style questions a law student could answer using ONLY the analysis above>"]
 }
+
+IMPORTANT RULES:
+- NEVER fabricate case names, citation numbers, judge names, or statutes not found in the text.
+- If a field cannot be determined from the text, write "Not determinable from provided text."
+- relatedCases must only list cases that appear by name in the case text.
+- Return ONLY valid JSON. No markdown. No commentary outside the JSON.
 
 CASE TEXT:
 ${caseText}`;
@@ -359,7 +394,7 @@ export const startSocraticSession = async (req: AuthRequest, res: Response): Pro
       mode: "socratic",
     });
 
-    sendSuccess(res, { sessionId, openingQuestion }, "Socratic session started");
+    sendSuccess(res, { sessionId, question: openingQuestion }, "Socratic session started");
   } catch (err) {
     sendError(res, "Failed to start Socratic session", 500, (err as Error).message);
   }
