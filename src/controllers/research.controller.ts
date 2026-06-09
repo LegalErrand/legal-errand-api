@@ -15,6 +15,29 @@ import {
 
 const today = () => new Date().toISOString().split("T")[0];
 
+/** Score a document against query terms without any external call. */
+function scoreDocument(
+  doc: { title: string; subject?: string; metadata?: { description?: string; jurisdiction?: string } },
+  terms: string[]
+): number {
+  const haystack = [
+    doc.title,
+    doc.subject ?? "",
+    doc.metadata?.description ?? "",
+    doc.metadata?.jurisdiction ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  let score = 0;
+  for (const term of terms) {
+    if (haystack.includes(term)) score += 1;
+    // Bonus if term appears in title
+    if (doc.title.toLowerCase().includes(term)) score += 0.5;
+  }
+  return terms.length > 0 ? score / (terms.length * 1.5) : 0;
+}
+
 export const search = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { query, subject, type, jurisdiction, courtLevel } = req.body;
@@ -23,56 +46,73 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
       return;
     }
 
-    const refinedQuery = await deepseekService.chat(
-      `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`
-    );
+    const terms = (query as string)
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .split(/\s+/)
+      .filter((t: string) => t.length > 2);
 
     const docFilter: Record<string, unknown> = { isLibraryContent: true };
     if (subject) docFilter.subject = subject;
     if (type) docFilter.type = type;
-
-    // jurisdiction and courtLevel are stored in document metadata
     if (jurisdiction) docFilter["metadata.jurisdiction"] = jurisdiction;
     if (courtLevel) docFilter["metadata.courtLevel"] = courtLevel;
 
-    const results = await LibraryDocument.find({
+    // Primary: full-text search (MongoDB index); fallback to regex scan if no hits
+    let results = await LibraryDocument.find({
       ...docFilter,
       $text: { $search: query },
     })
       .select("title type subject metadata s3Url")
-      .limit(10)
+      .limit(20)
       .lean();
 
-    interface RankedResult {
+    if (results.length === 0) {
+      // Fallback: regex match on title / description when text index has no hits
+      const regexTerms = terms.map((t: string) => new RegExp(t, "i"));
+      results = await LibraryDocument.find({
+        ...docFilter,
+        $or: [
+          { title: { $in: regexTerms } },
+          { "metadata.description": { $in: regexTerms } },
+        ],
+      })
+        .select("title type subject metadata s3Url")
+        .limit(20)
+        .lean();
+    }
+
+    // Algorithm: score and sort results locally
+    const scored = results
+      .map((doc) => ({ doc, score: scoreDocument(doc, terms) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10);
+
+    interface AlgoResult {
       title: string;
       relevanceScore: number;
       snippet: string;
-      whyRelevant: string;
+      type: string;
     }
 
-    const rankedResults =
-      results.length > 0
-        ? await deepseekService.structuredCompletion<{ results: RankedResult[] }>(
-            `For the research query: "${refinedQuery}", rank and annotate these Nigerian legal sources by relevance.
-Sources: ${JSON.stringify(results.map((r) => ({ title: r.title, type: r.type, subject: r.subject })))}
+    const algoResults: AlgoResult[] = scored.map(({ doc, score }) => ({
+      title: doc.title,
+      relevanceScore: parseFloat(Math.min(score, 1).toFixed(2)),
+      snippet: doc.metadata?.description ?? `${doc.type} — ${doc.subject ?? "Legal document"}`,
+      type: doc.type,
+    }));
 
-Return JSON:
-{
-  "results": [{ "title": "<title>", "relevanceScore": <0-1>, "snippet": "<why this is relevant>", "whyRelevant": "<brief explanation>" }]
-}`
-          )
-        : { results: [] };
-
+    // Save session with algorithm results immediately
     const session = await ResearchSession.create({
       userId: req.user!.userId,
       query,
-      refinedQuery,
-      results: rankedResults.results.map((r: RankedResult, i: number) => ({
-        documentId: results[i]?._id,
-        title: r.title,
-        snippet: r.snippet,
-        relevanceScore: r.relevanceScore,
-        type: results[i]?.type ?? "case_law",
+      refinedQuery: query,
+      results: scored.map(({ doc, score }, i) => ({
+        documentId: doc._id,
+        title: algoResults[i].title,
+        snippet: algoResults[i].snippet,
+        relevanceScore: algoResults[i].relevanceScore,
+        type: doc.type ?? "case_law",
       })),
     });
 
@@ -82,16 +122,31 @@ Return JSON:
       { upsert: true, new: true }
     );
 
+    // Respond immediately — don't block on DeepSeek
     sendCreated(
       res,
       {
         sessionId: session._id,
-        refinedQuery,
-        results: rankedResults.results,
+        refinedQuery: query,
+        results: algoResults,
         rawCount: results.length,
       },
       "Research results"
     );
+
+    // Fire-and-forget: let DeepSeek optionally improve the session (non-blocking)
+    if (results.length > 0) {
+      deepseekService
+        .chat(
+          `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`
+        )
+        .then((refinedQuery) => {
+          ResearchSession.findByIdAndUpdate(session._id, { refinedQuery }).catch(() => {});
+        })
+        .catch(() => {
+          // DeepSeek failure is silently ignored
+        });
+    }
   } catch (err) {
     sendError(res, "Research search failed", 500, (err as Error).message);
   }
