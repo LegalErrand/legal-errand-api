@@ -46,17 +46,6 @@ const envSchema = z.object({
   ZEPTO_SMTP_PASS: z.string().optional(),
   ZEPTO_MAIL_FROM: z.string().optional(),
 
-  // Zoho Mail SMTP (fallback)
-  ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
-  ZOHO_SMTP_PORT: z.string().default("465"),
-  ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),
-  ZOHO_SMTP_USER: z.string().optional(),
-  ZOHO_SMTP_PASS: z.string().optional(),
-  ZOHO_MAIL_FROM: z.string().optional(),
-
-  // Resend (fallback when SMTP providers fail or are unset)
-  RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

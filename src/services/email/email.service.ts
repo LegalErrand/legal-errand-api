@@ -1,5 +1,6 @@
 import { logger } from "../../utils/logger";
 import { sendEmail } from "./mail-delivery";
+import { buildWaitlistEmailHtml, WAITLIST_EMAIL_SUBJECT } from "./waitlist-email.template";
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -32,7 +33,7 @@ export const emailService = {
       logger.info(`[EMAIL] Password reset OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send password reset OTP to ${email} — check Zepto/Zoho/Resend config`
+        `[EMAIL] FAILED to send password reset OTP to ${email} — check ZeptoMail config`
       );
     }
     return ok;
@@ -56,9 +57,26 @@ export const emailService = {
       logger.info(`[EMAIL] Verification OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send verification OTP to ${email} — check Zepto/Zoho/Resend config`
+        `[EMAIL] FAILED to send verification OTP to ${email} — check ZeptoMail config`
       );
     }
     return ok;
   },
 };
+
+export async function sendWaitlistConfirmationEmail(
+  email: string,
+  firstName?: string
+): Promise<boolean> {
+  const ok = await sendEmail({
+    to: email,
+    subject: WAITLIST_EMAIL_SUBJECT,
+    html: buildWaitlistEmailHtml(firstName),
+  });
+  if (ok) {
+    logger.info(`[EMAIL] Waitlist confirmation sent to ${email}`);
+  } else {
+    logger.error(`[EMAIL] FAILED to send waitlist confirmation to ${email} — check ZeptoMail config`);
+  }
+  return ok;
+}

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Waitlist } from "../models/Waitlist";
-import { sendWaitlistConfirmationEmail } from "../services/email/zoho-mail.service";
+import { sendWaitlistConfirmationEmail } from "../services/email/email.service";
 import { ApiMessage } from "../utils/api-messages";
 import { sendBadRequest, sendCreated, sendError } from "../utils/response";
 
