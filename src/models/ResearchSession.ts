@@ -44,7 +44,7 @@ const ResearchSessionSchema = new Schema<IResearchSessionDocument>(
     qualityScore: { type: Number, min: 0, max: 100 },
     missedSources: [{ type: String }],
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 ResearchSessionSchema.index({ userId: 1, createdAt: -1 });

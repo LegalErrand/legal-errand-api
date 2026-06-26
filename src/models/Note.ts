@@ -29,7 +29,7 @@ const NoteSchema = new Schema<INoteDocument>(
     folder: { type: String, default: "General" },
     linkedDocumentId: { type: Schema.Types.ObjectId, ref: "Document" },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 NoteSchema.index({ userId: 1, subject: 1 });

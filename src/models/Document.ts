@@ -39,7 +39,7 @@ const DocumentSchema = new Schema<IDocumentDocument>(
     },
     bookmarks: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 DocumentSchema.index({ subject: 1, type: 1 });

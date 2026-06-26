@@ -27,7 +27,7 @@ const ProgressSchema = new Schema<IProgressDocument>(
     researchSessions: { type: Number, default: 0 },
     subjectActivity: { type: Map, of: Number, default: {} },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 ProgressSchema.index({ userId: 1, date: 1 }, { unique: true });
@@ -66,7 +66,7 @@ const ReasoningScoreSchema = new Schema<IReasoningScoreDocument>(
     bySubject: { type: Map, of: Number, default: {} },
     calculatedAt: { type: Date, default: Date.now },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 ReasoningScoreSchema.index({ userId: 1, calculatedAt: -1 });
