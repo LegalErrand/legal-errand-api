@@ -17,7 +17,11 @@ const today = () => new Date().toISOString().split("T")[0];
 
 /** Score a document against query terms without any external call. */
 function scoreDocument(
-  doc: { title: string; subject?: string; metadata?: { description?: string; jurisdiction?: string } },
+  doc: {
+    title: string;
+    subject?: string;
+    metadata?: { description?: string; jurisdiction?: string };
+  },
   terms: string[]
 ): number {
   const haystack = [
@@ -53,7 +57,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
     if (subject) docFilter.subject = subject;
     if (type) docFilter.type = type;
     if (jurisdiction) docFilter["metadata.jurisdiction"] = jurisdiction;
-    if (courtLevel) docFilter["metadata.courtLevel"] = courtLevel;
+    if (courtLevel) docFilter["metadata.court"] = courtLevel;
 
     let results;
     if (!query || terms.length === 0) {
@@ -77,10 +81,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
         const regexTerms = terms.map((t: string) => new RegExp(t, "i"));
         results = await LibraryDocument.find({
           ...docFilter,
-          $or: [
-            { title: { $in: regexTerms } },
-            { "metadata.description": { $in: regexTerms } },
-          ],
+          $or: [{ title: { $in: regexTerms } }, { "metadata.description": { $in: regexTerms } }],
         })
           .select("title type subject metadata s3Url")
           .limit(50)
@@ -110,7 +111,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
       relevanceScore: parseFloat(Math.min(score, 1).toFixed(2)),
       snippet: doc.metadata?.description ?? `${doc.type} — ${doc.subject ?? "Legal document"}`,
       type: doc.type,
-      courtLevel: doc.metadata?.courtLevel,
+      courtLevel: doc.metadata?.court,
       citation: doc.metadata?.citation,
     }));
 
@@ -121,7 +122,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
         userId: req.user!.userId,
         query,
         refinedQuery: query,
-        results: scored.map(({ doc, score }, i) => ({
+        results: scored.map(({ doc }, i) => ({
           documentId: doc._id,
           title: algoResults[i].title,
           snippet: algoResults[i].snippet,
@@ -150,13 +151,14 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
     );
 
     // Fire-and-forget: let DeepSeek optionally improve the session (non-blocking)
-    if (query && results.length > 0) {
+    if (query && results.length > 0 && sessionId) {
+      const id = sessionId;
       deepseekService
         .chat(
           `Rewrite this research query as a precise Nigerian legal research question: "${query}". Return only the refined question, nothing else.`
         )
         .then((refinedQuery) => {
-          ResearchSession.findByIdAndUpdate(session._id, { refinedQuery }).catch(() => {});
+          ResearchSession.findByIdAndUpdate(id, { refinedQuery }).catch(() => {});
         })
         .catch(() => {
           // DeepSeek failure is silently ignored
