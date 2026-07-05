@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { logger } from "../utils/logger";
+import { isProbePath } from "../utils/probe-path";
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
@@ -14,7 +15,9 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     if (res.statusCode >= 500) {
       logger.error(line);
     } else if (res.statusCode >= 400) {
-      logger.warn(line);
+      const log =
+        res.statusCode === 404 && isProbePath(req.originalUrl) ? logger.debug : logger.warn;
+      log(line);
     } else {
       logger.info(line);
     }

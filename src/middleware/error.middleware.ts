@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { ApiMessage } from "../utils/api-messages";
 import { logger } from "../utils/logger";
+import { isProbePath } from "../utils/probe-path";
 import type { AdminRequest, AuthRequest } from "../types";
 
 export class AppError extends Error {
@@ -47,6 +48,8 @@ export const errorHandler = (
 };
 
 export const notFoundHandler = (req: Request, res: Response): void => {
-  logger.warn("Route not found", requestContext(req));
+  const context = requestContext(req);
+  const log = isProbePath(req.originalUrl) ? logger.debug : logger.warn;
+  log("Route not found", context);
   res.status(404).json({ success: false, message: ApiMessage.ROUTE_NOT_FOUND });
 };

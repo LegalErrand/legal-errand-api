@@ -57,7 +57,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
     if (subject) docFilter.subject = subject;
     if (type) docFilter.type = type;
     if (jurisdiction) docFilter["metadata.jurisdiction"] = jurisdiction;
-    if (courtLevel) docFilter["metadata.court"] = courtLevel;
+    if (courtLevel) docFilter["metadata.courtLevel"] = courtLevel;
 
     let results;
     if (!query || terms.length === 0) {
@@ -111,7 +111,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
       relevanceScore: parseFloat(Math.min(score, 1).toFixed(2)),
       snippet: doc.metadata?.description ?? `${doc.type} — ${doc.subject ?? "Legal document"}`,
       type: doc.type,
-      courtLevel: doc.metadata?.court,
+      courtLevel: doc.metadata?.courtLevel,
       citation: doc.metadata?.citation,
     }));
 

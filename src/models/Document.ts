@@ -12,6 +12,7 @@ export interface IDocumentDocument extends Document {
   isLibraryContent: boolean;
   metadata: {
     court?: string;
+    courtLevel?: string;
     year?: number;
     citation?: string;
     jurisdiction?: string;
@@ -32,6 +33,7 @@ const DocumentSchema = new Schema<IDocumentDocument>(
     isLibraryContent: { type: Boolean, default: false },
     metadata: {
       court: String,
+      courtLevel: String,
       year: Number,
       citation: String,
       jurisdiction: { type: String, default: "Nigeria" },
