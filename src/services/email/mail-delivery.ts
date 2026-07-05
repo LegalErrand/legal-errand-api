@@ -1,7 +1,8 @@
 import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
-import { sendZeptoApiMail } from "./zepto-api.service";
+import { sendZeptoApiMail, isZeptoApiConfigured } from "./zepto-api.service";
 import { sendZeptoMail } from "./zepto-transport";
+import { isZohoConfigured, sendZohoMail } from "./zoho-transport";
 
 export type MailOptions = {
   to: string;
@@ -9,35 +10,59 @@ export type MailOptions = {
   html: string;
 };
 
-const isConfigured = (): boolean => Boolean(env.ZEPTO_SMTP_PASS && env.ZEPTO_MAIL_FROM);
+const isConfigured = (): boolean => isZeptoApiConfigured() || isZohoConfigured();
 
 /**
- * ZeptoMail SMTP first, falls back to ZeptoMail API if SMTP fails.
+ * ZeptoMail API first, then Zoho SMTP, then ZeptoMail SMTP.
  */
 export const sendEmail = async (options: MailOptions): Promise<boolean> => {
   if (!isConfigured()) {
-    logger.error("Email delivery skipped — set ZEPTO_SMTP_PASS and ZEPTO_MAIL_FROM", {
+    logger.error("Email delivery skipped — set ZEPTO_* and/or ZOHO_* mail env vars", {
       to: options.to,
       subject: options.subject,
     });
     return false;
   }
 
-  const smtpOk = await sendZeptoMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
-  if (smtpOk) return true;
-
-  logger.warn("ZeptoMail SMTP failed — falling back to ZeptoMail API", {
-    to: options.to,
-    subject: options.subject,
-  });
-
-  const apiOk = await sendZeptoApiMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
-  if (apiOk) {
-    logger.info("Email delivered via ZeptoMail API", { to: options.to, subject: options.subject });
-    return true;
+  if (isZeptoApiConfigured()) {
+    const apiOk = await sendZeptoApiMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
+    if (apiOk) {
+      logger.info("Email delivered via ZeptoMail API", {
+        to: options.to,
+        subject: options.subject,
+      });
+      return true;
+    }
+    logger.warn("ZeptoMail API failed — falling back to Zoho SMTP", {
+      to: options.to,
+      subject: options.subject,
+    });
   }
 
-  logger.error("Email delivery failed — both ZeptoMail SMTP and API failed", {
+  if (isZohoConfigured()) {
+    const zohoOk = await sendZohoMail({ ...options, from: env.ZOHO_MAIL_FROM! });
+    if (zohoOk) {
+      logger.info("Email delivered via Zoho SMTP", { to: options.to, subject: options.subject });
+      return true;
+    }
+    logger.warn("Zoho SMTP failed — falling back to ZeptoMail SMTP", {
+      to: options.to,
+      subject: options.subject,
+    });
+  }
+
+  if (isZeptoApiConfigured()) {
+    const smtpOk = await sendZeptoMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
+    if (smtpOk) {
+      logger.info("Email delivered via ZeptoMail SMTP", {
+        to: options.to,
+        subject: options.subject,
+      });
+      return true;
+    }
+  }
+
+  logger.error("Email delivery failed — ZeptoMail API, Zoho SMTP, and ZeptoMail SMTP all failed", {
     to: options.to,
     subject: options.subject,
   });

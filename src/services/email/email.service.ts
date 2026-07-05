@@ -33,7 +33,7 @@ export const emailService = {
       logger.info(`[EMAIL] Password reset OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send password reset OTP to ${email} — check ZeptoMail config`
+        `[EMAIL] FAILED to send password reset OTP to ${email} — check mail provider config`
       );
     }
     return ok;
@@ -57,7 +57,7 @@ export const emailService = {
       logger.info(`[EMAIL] Verification OTP sent to ${email}`);
     } else {
       logger.error(
-        `[EMAIL] FAILED to send verification OTP to ${email} — check ZeptoMail config`
+        `[EMAIL] FAILED to send verification OTP to ${email} — check mail provider config`
       );
     }
     return ok;
@@ -76,7 +76,9 @@ export async function sendWaitlistConfirmationEmail(
   if (ok) {
     logger.info(`[EMAIL] Waitlist confirmation sent to ${email}`);
   } else {
-    logger.error(`[EMAIL] FAILED to send waitlist confirmation to ${email} — check ZeptoMail config`);
+    logger.error(
+      `[EMAIL] FAILED to send waitlist confirmation to ${email} — check mail provider config`
+    );
   }
   return ok;
 }

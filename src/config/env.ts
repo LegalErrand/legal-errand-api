@@ -38,7 +38,7 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
 
-  // ZeptoMail SMTP (primary — waitlist + OTP emails)
+  // ZeptoMail (API + SMTP — shared send token)
   ZEPTO_SMTP_HOST: z.string().default("smtp.zeptomail.com"),
   ZEPTO_SMTP_PORT: z.string().default("587"),
   ZEPTO_SMTP_SECURE: z.enum(["true", "false"]).default("false"),
@@ -46,6 +46,13 @@ const envSchema = z.object({
   ZEPTO_SMTP_PASS: z.string().optional(),
   ZEPTO_MAIL_FROM: z.string().optional(),
 
+  // Zoho Mail SMTP (fallback)
+  ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
+  ZOHO_SMTP_PORT: z.string().default("465"),
+  ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),
+  ZOHO_SMTP_USER: z.string().optional(),
+  ZOHO_SMTP_PASS: z.string().optional(),
+  ZOHO_MAIL_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
