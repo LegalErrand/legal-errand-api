@@ -30,7 +30,7 @@ const QuestionSchema = new Schema<IQuestionDocument>(
     tags: [{ type: String, lowercase: true }],
     isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 QuestionSchema.index({ subject: 1, difficulty: 1, type: 1 });
@@ -68,7 +68,7 @@ const QuestionAttemptSchema = new Schema<IQuestionAttemptDocument>(
     },
     aiFeedback: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 QuestionAttemptSchema.index({ userId: 1, createdAt: -1 });

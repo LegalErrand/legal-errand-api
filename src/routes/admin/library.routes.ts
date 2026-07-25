@@ -9,8 +9,10 @@ import {
   getLibraryUploadUrl,
   completeLibraryUpload,
   getDocumentSignedUrl,
+  bulkUploadLibraryFiles,
 } from "../../controllers/admin/library.controller";
 import { authenticateAdmin, requireContentAdmin } from "../../middleware/adminAuth.middleware";
+import { uploadBulk } from "../../middleware/upload.middleware";
 
 const router = Router();
 
@@ -19,6 +21,7 @@ router.use(authenticateAdmin, requireContentAdmin);
 router.get("/", listAllDocuments);
 router.post("/upload-url", getLibraryUploadUrl);
 router.post("/upload/complete", completeLibraryUpload);
+router.post("/bulk-upload", uploadBulk, bulkUploadLibraryFiles);
 router.get("/:id", getAnyDocument);
 router.patch("/:id", updateAnyDocument);
 router.patch("/:id/promote", promoteToLibrary);

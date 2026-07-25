@@ -17,7 +17,7 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Auth"],
       summary: "Register a new account",
       description:
-        "Creates an unverified account and sends a 6-digit OTP to the user's email via Zoho SMTP (when configured). Re-registering with the same unverified email overwrites the pending account and sends a new OTP.",
+        "Creates an unverified account and sends a 6-digit OTP via ZeptoMail API (Zoho SMTP, then ZeptoMail SMTP as fallbacks). Re-registering with the same unverified email overwrites the pending account and sends a new OTP.",
       security: [],
       requestBody: {
         required: true,
@@ -79,7 +79,9 @@ export const userPaths: Record<string, unknown> = {
       },
       responses: {
         "200": { description: "Email verified. Returns token, refreshToken, and user." },
-        "401": { description: "OTP invalid or expired." },
+        "401": { description: "OTP invalid or expired / incorrect." },
+        "404": { description: "User not found." },
+        "500": { description: "Email verification failed." },
       },
     },
   },
@@ -101,7 +103,12 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "New OTP sent if account exists and is unverified." } },
+      responses: {
+        "200": { description: "A new OTP has been sent to your email." },
+        "400": { description: "Email is required / email already verified." },
+        "404": { description: "User not found." },
+        "500": { description: "Failed to resend OTP." },
+      },
     },
   },
 
@@ -127,7 +134,8 @@ export const userPaths: Record<string, unknown> = {
       },
       responses: {
         "200": { description: "Login successful. Returns token, refreshToken, and user." },
-        "401": { description: "Invalid credentials or account suspended." },
+        "401": { description: "Incorrect password / suspended account." },
+        "404": { description: "User not found." },
       },
     },
   },
@@ -207,7 +215,7 @@ export const userPaths: Record<string, unknown> = {
       tags: ["Auth"],
       summary: "Request password reset OTP",
       description:
-        "Sends a password-reset OTP via Zoho SMTP when the email exists. Always returns success to prevent email enumeration.",
+        "Sends a password-reset OTP via ZeptoMail API (Zoho SMTP, then ZeptoMail SMTP as fallbacks) when the user exists.",
       security: [],
       requestBody: {
         required: true,
@@ -221,7 +229,12 @@ export const userPaths: Record<string, unknown> = {
           },
         },
       },
-      responses: { "200": { description: "OTP sent if email exists." } },
+      responses: {
+        "200": { description: "OTP generated and emailed." },
+        "400": { description: "Email is required." },
+        "404": { description: "User not found." },
+        "500": { description: "Failed to process forgot password." },
+      },
     },
   },
 
@@ -244,7 +257,9 @@ export const userPaths: Record<string, unknown> = {
       },
       responses: {
         "200": { description: "OTP verified. Returns short-lived resetToken (15 min)." },
-        "401": { description: "OTP invalid or expired." },
+        "401": { description: "OTP invalid or expired / incorrect." },
+        "404": { description: "User not found." },
+        "500": { description: "Failed to verify OTP." },
       },
     },
   },

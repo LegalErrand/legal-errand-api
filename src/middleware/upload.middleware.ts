@@ -25,6 +25,7 @@ export const upload = multer({
 });
 
 export const uploadPDF = upload.single("file");
+export const uploadBulk = upload.array("files", 20);
 export const uploadAvatar = multer({
   storage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB for avatars

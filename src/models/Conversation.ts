@@ -18,7 +18,7 @@ const ConversationSchema = new Schema<IConversationDocument>(
     lastMessage: { type: String, default: "" },
     mode: { type: String, enum: ["standard", "socratic"], default: "standard" },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 ConversationSchema.index({ userId: 1, updatedAt: -1 });

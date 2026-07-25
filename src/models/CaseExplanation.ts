@@ -30,7 +30,7 @@ const CaseExplanationSchema = new Schema<ICaseExplanationDocument>(
     practiceQuestions: [{ type: String }],
     savedToNoteId: { type: Schema.Types.ObjectId, ref: "Note" },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 CaseExplanationSchema.index({ userId: 1, createdAt: -1 });

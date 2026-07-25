@@ -25,7 +25,7 @@ const WaitlistSchema = new Schema<IWaitlistDocument>(
     level: { type: String, required: true, trim: true },
     country: { type: String, required: true, trim: true },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 export const Waitlist = mongoose.model<IWaitlistDocument>("Waitlist", WaitlistSchema);

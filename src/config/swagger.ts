@@ -30,7 +30,7 @@ const userSpec = {
       "AI endpoints (chat, case explainer, research) are rate-limited by daily quota: **10 AI queries/day** and **5 research sessions/day** on the free tier.",
       "",
       "### Email (OTP)",
-      "Verification and password-reset OTPs are sent via **Zoho Mail SMTP** when `ZOHO_SMTP_*` env vars are configured. Email failures are logged server-side and do not block API responses.",
+      "Verification and password-reset OTPs use **ZeptoMail API** first, then **Zoho SMTP**, then **ZeptoMail SMTP**. Email failures are logged server-side and do not block API responses.",
       "",
       "### Response shape",
       "Most endpoints return `{ success, message, data?, meta? }`. Errors return `{ success: false, message }` (and optional `error` in development).",

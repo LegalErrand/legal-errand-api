@@ -34,7 +34,7 @@ const GoalSchema = new Schema<IGoalDocument>(
     isCompleted: { type: Boolean, default: false },
     completedAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 GoalSchema.index({ userId: 1, isCompleted: 1 });

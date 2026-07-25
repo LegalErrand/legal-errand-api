@@ -31,3 +31,6 @@ Thumbs.db
 *.pdf
 endpoints.json
 parse-pdf.js
+
+.claude
+

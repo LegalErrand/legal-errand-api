@@ -2,7 +2,7 @@ import { Response } from "express";
 import { AdminRequest } from "../../types";
 import { LibraryDocument } from "../../models/Document";
 import { s3Service } from "../../services/storage/s3.service";
-import { DOCUMENT_TYPES, LAW_SUBJECTS } from "../../utils/constants";
+import { DOCUMENT_TYPES, LAW_SUBJECTS, DocumentType } from "../../utils/constants";
 import {
   sendSuccess,
   sendCreated,
@@ -163,7 +163,7 @@ export const deleteAnyDocument = async (req: AdminRequest, res: Response): Promi
       return;
     }
 
-    await s3Service.deleteFile(doc.s3Key);
+    if (doc.s3Key) await s3Service.deleteFile(doc.s3Key);
     await doc.deleteOne();
 
     sendSuccess(res, null, "Document deleted");
@@ -234,9 +234,115 @@ export const getDocumentSignedUrl = async (req: AdminRequest, res: Response): Pr
       return;
     }
 
+    if (!doc.s3Key) {
+      sendBadRequest(res, "This document has no associated file stored in S3");
+      return;
+    }
+
     const signedUrl = await s3Service.getSignedDownloadUrl(doc.s3Key, 3600);
     sendSuccess(res, { signedUrl, expiresIn: 3600 }, "Signed URL generated");
   } catch (err) {
     sendError(res, "Failed to generate access URL", 500, (err as Error).message);
+  }
+};
+
+/**
+ * POST /admin/library/bulk-upload
+ * Accepts up to 20 files via multipart/form-data (field: "files").
+ * Optional body fields per file (as JSON arrays): titles[], types[], subjects[]
+ * Falls back to filename-derived title and "statute" type when not provided.
+ */
+export const bulkUploadLibraryFiles = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const files = req.files as Express.Multer.File[] | undefined;
+    if (!files || files.length === 0) {
+      sendBadRequest(res, "At least one file is required");
+      return;
+    }
+
+    const titles: string[] = Array.isArray(req.body.titles)
+      ? req.body.titles
+      : req.body.titles
+        ? [req.body.titles]
+        : [];
+    const types: string[] = Array.isArray(req.body.types)
+      ? req.body.types
+      : req.body.types
+        ? [req.body.types]
+        : [];
+    const subjects: string[] = Array.isArray(req.body.subjects)
+      ? req.body.subjects
+      : req.body.subjects
+        ? [req.body.subjects]
+        : [];
+
+    const results: { fileName: string; status: "success" | "error"; error?: string; docId?: string }[] = [];
+
+    await Promise.all(
+      files.map(async (file, i) => {
+        const derivedTitle = titles[i] ?? file.originalname.replace(/\.[^.]+$/, "");
+        const rawType = types[i] ?? "statute";
+        const subject = subjects[i];
+
+        if (!DOCUMENT_TYPES.includes(rawType as DocumentType)) {
+          results[i] = {
+            fileName: file.originalname,
+            status: "error",
+            error: `Invalid type "${rawType}". Must be one of: ${DOCUMENT_TYPES.join(", ")}`,
+          };
+          return;
+        }
+
+        if (subject && !LAW_SUBJECTS.includes(subject as never)) {
+          results[i] = {
+            fileName: file.originalname,
+            status: "error",
+            error: `Invalid subject "${subject}".`,
+          };
+          return;
+        }
+
+        try {
+          const { s3Key, s3Url } = await s3Service.uploadFile(
+            file.buffer,
+            file.originalname,
+            file.mimetype,
+            "LIBRARY"
+          );
+
+          const docData: Record<string, unknown> = {
+            title: derivedTitle,
+            type: rawType as DocumentType,
+            s3Key,
+            s3Url,
+            fileSize: file.size,
+            isLibraryContent: true,
+            metadata: { jurisdiction: "Nigeria" },
+          };
+          if (subject) docData.subject = subject;
+
+          const doc = await LibraryDocument.create(docData);
+
+          results[i] = { fileName: file.originalname, status: "success", docId: (doc._id as { toString(): string }).toString() };
+        } catch (uploadErr) {
+          results[i] = {
+            fileName: file.originalname,
+            status: "error",
+            error: (uploadErr as Error).message,
+          };
+        }
+      })
+    );
+
+    const succeeded = results.filter((r) => r.status === "success").length;
+    const failed = results.filter((r) => r.status === "error").length;
+
+    sendCreated(
+      res,
+      { results, summary: { total: files.length, succeeded, failed } },
+      `Bulk upload complete: ${succeeded} succeeded, ${failed} failed`
+    );
+  } catch (err) {
+    sendError(res, "Bulk upload failed", 500, (err as Error).message);
   }
 };

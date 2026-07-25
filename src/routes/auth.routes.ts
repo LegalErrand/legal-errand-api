@@ -13,19 +13,20 @@ import {
   changePassword,
 } from "../controllers/auth.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { authIpRateLimit } from "../middleware/rateLimit.middleware";
 
 const router = Router();
 
-router.post("/register", register);
-router.post("/verify-email", verifyEmail);
-router.post("/resend-verification-otp", resendVerificationOtp);
-router.post("/login", login);
-router.post("/refresh", refreshToken);
+router.post("/register", authIpRateLimit, register);
+router.post("/verify-email", authIpRateLimit, verifyEmail);
+router.post("/resend-verification-otp", authIpRateLimit, resendVerificationOtp);
+router.post("/login", authIpRateLimit, login);
+router.post("/refresh", authIpRateLimit, refreshToken);
 router.get("/me", authenticate, getMe);
 router.post("/logout", authenticate, logout);
 router.put("/change-password", authenticate, changePassword);
-router.post("/forgot-password", forgotPassword);
-router.post("/verify-otp", verifyOtp);
-router.post("/reset-password", resetPassword);
+router.post("/forgot-password", authIpRateLimit, forgotPassword);
+router.post("/verify-otp", authIpRateLimit, verifyOtp);
+router.post("/reset-password", authIpRateLimit, resetPassword);
 
 export default router;

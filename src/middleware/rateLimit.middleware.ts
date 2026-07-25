@@ -1,9 +1,49 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../types";
 import { redisService } from "../services/cache/redis.service";
 import { REDIS_KEYS } from "../utils/constants";
 import { AI_LIMITS } from "../config/deepseek";
 import { sendError } from "../utils/response";
+
+// ─── Auth IP rate limit ────────────────────────────────────────────────────────
+// 20 requests per 15 minutes per IP across all auth endpoints.
+// Falls back to allow if Redis is unavailable (fail-open) to avoid blocking
+// legitimate users during a cache outage.
+
+const AUTH_IP_WINDOW_SECONDS = 15 * 60; // 15 minutes
+const AUTH_IP_MAX_REQUESTS = 20;
+
+export const authIpRateLimit = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const ip =
+    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+    req.ip ??
+    req.socket.remoteAddress ??
+    "unknown";
+
+  const key = `auth_ip_rl:${ip}:${windowSlot()}`;
+  const count = await redisService.incr(key, AUTH_IP_WINDOW_SECONDS);
+
+  if (count > AUTH_IP_MAX_REQUESTS) {
+    res.setHeader("Retry-After", AUTH_IP_WINDOW_SECONDS.toString());
+    sendError(res, "Too many requests from this IP. Please try again in 15 minutes.", 429);
+    return;
+  }
+
+  next();
+};
+
+/** Returns the current 15-minute window slot (e.g. "2026-05-27T14:30") */
+function windowSlot(): string {
+  const d = new Date();
+  const slot = Math.floor(d.getMinutes() / 15) * 15;
+  return `${d.toISOString().slice(0, 13)}:${slot.toString().padStart(2, "0")}`;
+}
+
+// ─── Per-user AI limits ────────────────────────────────────────────────────────
 
 /**
  * Rate-limit AI queries per user per day (Free: 10, Premium: unlimited)
