@@ -140,6 +140,42 @@ export const userPaths: Record<string, unknown> = {
     },
   },
 
+  "/auth/google": {
+    post: {
+      tags: ["Auth"],
+      summary: "Sign in or sign up with Google",
+      description:
+        "Verifies a Google OAuth access token, creates an account if needed, and returns JWT tokens. New accounts skip email OTP.",
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["accessToken"],
+              properties: {
+                accessToken: { type: "string" },
+                accountType: {
+                  type: "string",
+                  enum: ["Undergraduate", "Law School Student"],
+                },
+                referralCode: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Login successful. Returns token, refreshToken, user, and isNewUser.",
+        },
+        "401": { description: "Invalid Google token / suspended account." },
+        "503": { description: "Google sign-in is not configured." },
+      },
+    },
+  },
+
   "/auth/refresh": {
     post: {
       tags: ["Auth"],

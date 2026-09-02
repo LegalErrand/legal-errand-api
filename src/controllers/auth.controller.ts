@@ -23,6 +23,7 @@ import {
 import { AuthRequest } from "../types";
 import crypto from "crypto";
 import { emailService } from "../services/email/email.service";
+import { verifyGoogleAccessToken } from "../services/auth/google.service";
 
 const signToken = (userId: string, email: string, tier: string) =>
   jwt.sign({ userId, email, tier }, env.JWT_SECRET, {
@@ -193,6 +194,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     if (!(await user.comparePassword(password))) {
+      if (!user.password) {
+        sendUnauthorized(res, ApiMessage.USE_GOOGLE_SIGN_IN);
+        return;
+      }
       sendUnauthorized(res, ApiMessage.INCORRECT_PASSWORD);
       return;
     }
@@ -214,6 +219,90 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     sendSuccess(res, { token, refreshToken, user: userObj }, ApiMessage.LOGIN_SUCCESS);
   } catch (err) {
     sendError(res, ApiMessage.LOGIN_FAILED, 500, err);
+  }
+};
+
+export const googleAuth = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!env.GOOGLE_CLIENT_ID?.trim()) {
+      sendError(res, ApiMessage.GOOGLE_NOT_CONFIGURED, 503);
+      return;
+    }
+
+    const { accessToken, accountType, referralCode } = req.body as {
+      accessToken?: string;
+      accountType?: string;
+      referralCode?: string;
+    };
+
+    if (!accessToken || typeof accessToken !== "string") {
+      sendBadRequest(res, ApiMessage.GOOGLE_TOKEN_REQUIRED);
+      return;
+    }
+
+    let profile;
+    try {
+      profile = await verifyGoogleAccessToken(accessToken);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message === "unverified_google_email") {
+        sendUnauthorized(res, ApiMessage.GOOGLE_EMAIL_UNVERIFIED);
+        return;
+      }
+      sendUnauthorized(res, ApiMessage.GOOGLE_TOKEN_INVALID);
+      return;
+    }
+
+    let user = await User.findOne({ googleId: profile.googleId });
+    let isNewUser = false;
+
+    if (!user) {
+      user = await User.findOne({ email: profile.email });
+      if (user) {
+        user.googleId = profile.googleId;
+        user.isEmailVerified = true;
+        if (!user.firstName) user.firstName = profile.firstName;
+        if (!user.lastName) user.lastName = profile.lastName;
+      } else {
+        const resolvedType =
+          accountType === "Law School Student" || accountType === "Undergraduate"
+            ? accountType
+            : "Undergraduate";
+
+        user = new User({
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          email: profile.email,
+          googleId: profile.googleId,
+          accountType: resolvedType,
+          isEmailVerified: true,
+        });
+
+        if (referralCode) {
+          const referrer = await User.findOne({ referralKey: String(referralCode).toUpperCase() });
+          if (referrer) user.referredBy = referrer._id;
+        }
+        isNewUser = true;
+      }
+    }
+
+    if (user.isBlocked) {
+      sendUnauthorized(res, ApiMessage.ACCOUNT_SUSPENDED);
+      return;
+    }
+
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = signToken(user._id.toString(), user.email, user.tier);
+    const refreshToken = signRefreshToken(user._id.toString());
+    sendSuccess(
+      res,
+      { token, refreshToken, user: user.toJSON(), isNewUser },
+      ApiMessage.LOGIN_SUCCESS
+    );
+  } catch (err) {
+    sendError(res, ApiMessage.GOOGLE_AUTH_FAILED, 500, err);
   }
 };
 

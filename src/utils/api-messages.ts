@@ -52,6 +52,12 @@ export enum ApiMessage {
   CURRENT_PASSWORD_INCORRECT = "Current password is incorrect",
   PASSWORD_CHANGED = "Password changed successfully",
   PASSWORD_CHANGE_FAILED = "Failed to change password",
+  USE_GOOGLE_SIGN_IN = "This account uses Google sign-in. Please continue with Google.",
+  GOOGLE_TOKEN_REQUIRED = "Google access token is required",
+  GOOGLE_NOT_CONFIGURED = "Google sign-in is not configured",
+  GOOGLE_TOKEN_INVALID = "Google sign-in failed. Please try again.",
+  GOOGLE_EMAIL_UNVERIFIED = "Google email is not verified",
+  GOOGLE_AUTH_FAILED = "Google sign-in failed",
 
   // ─── Admin auth ──────────────────────────────────────────────────────────
   ADMIN_ACCOUNT_SUSPENDED = "Your admin account has been suspended",

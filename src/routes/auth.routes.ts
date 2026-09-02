@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   register,
   login,
+  googleAuth,
   refreshToken,
   getMe,
   forgotPassword,
@@ -21,6 +22,7 @@ router.post("/register", authIpRateLimit, register);
 router.post("/verify-email", authIpRateLimit, verifyEmail);
 router.post("/resend-verification-otp", authIpRateLimit, resendVerificationOtp);
 router.post("/login", authIpRateLimit, login);
+router.post("/google", authIpRateLimit, googleAuth);
 router.post("/refresh", authIpRateLimit, refreshToken);
 router.get("/me", authenticate, getMe);
 router.post("/logout", authenticate, logout);
