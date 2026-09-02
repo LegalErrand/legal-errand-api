@@ -9,6 +9,7 @@ import researchRoutes from "./research.routes";
 import waitlistRoutes from "./waitlist.routes";
 import userRoutes from "./user.routes";
 import adminRoutes from "./admin";
+import { isRedisAvailable } from "../config/redis";
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.get("/health", (_req, res) => {
     success: true,
     message: "LegalErrand API is running",
     timestamp: new Date().toISOString(),
+    redis: isRedisAvailable() ? "connected" : "unavailable",
   });
 });
 
