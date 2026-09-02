@@ -53,6 +53,9 @@ const envSchema = z.object({
   ZOHO_SMTP_USER: z.string().optional(),
   ZOHO_SMTP_PASS: z.string().optional(),
   ZOHO_MAIL_FROM: z.string().optional(),
+
+  // Google Sign-In (GIS). Optional — /auth/google returns 503 when unset.
+  GOOGLE_CLIENT_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

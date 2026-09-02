@@ -7,7 +7,8 @@ export interface IUserDocument extends Document {
   firstName: string;
   lastName: string;
   email: string;
-  password: string;
+  password?: string;
+  googleId?: string;
   accountType: "Undergraduate" | "Law School Student";
   username?: string;
   country?: string;
@@ -50,7 +51,18 @@ const UserSchema = new Schema<IUserDocument>(
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email format"],
     },
-    password: { type: String, required: true, minlength: 8, select: false },
+    password: {
+      type: String,
+      required: [
+        function (this: { googleId?: string }) {
+          return !this.googleId;
+        },
+        "Password is required",
+      ],
+      minlength: 8,
+      select: false,
+    },
+    googleId: { type: String, unique: true, sparse: true, index: true },
     accountType: { type: String, enum: ["Undergraduate", "Law School Student"], required: true },
     username: { type: String, trim: true },
     country: { type: String, trim: true },
@@ -95,11 +107,12 @@ UserSchema.pre("save", async function () {
     this.referralKey = `${baseName}-${randomChars}`;
   }
 
-  if (!this.isModified("password")) return;
+  if (!this.isModified("password") || !this.password) return;
   this.password = await bcrypt.hash(this.password, parseInt(env.BCRYPT_SALT_ROUNDS));
 });
 
 UserSchema.methods.comparePassword = async function (candidate: string): Promise<boolean> {
+  if (!this.password) return false;
   return bcrypt.compare(candidate, this.password);
 };
 
