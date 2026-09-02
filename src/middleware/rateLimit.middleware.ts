@@ -6,31 +6,35 @@ import { AI_LIMITS } from "../config/deepseek";
 import { sendError } from "../utils/response";
 
 // ─── Auth IP rate limit ────────────────────────────────────────────────────────
-// 20 requests per 15 minutes per IP across all auth endpoints.
-// Falls back to allow if Redis is unavailable (fail-open) to avoid blocking
-// legitimate users during a cache outage.
+// 60 requests per 15 minutes per IP across all auth endpoints.
+// Falls back to allow if Redis is unavailable or slow (fail-open) so a cache
+// outage can never hang or block sign-in.
 
 const AUTH_IP_WINDOW_SECONDS = 15 * 60; // 15 minutes
-const AUTH_IP_MAX_REQUESTS = 20;
+const AUTH_IP_MAX_REQUESTS = 60;
 
 export const authIpRateLimit = async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const ip =
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-    req.ip ??
-    req.socket.remoteAddress ??
-    "unknown";
+  try {
+    const ip =
+      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+      req.ip ??
+      req.socket.remoteAddress ??
+      "unknown";
 
-  const key = `auth_ip_rl:${ip}:${windowSlot()}`;
-  const count = await redisService.incr(key, AUTH_IP_WINDOW_SECONDS);
+    const key = `auth_ip_rl:${ip}:${windowSlot()}`;
+    const count = await redisService.incr(key, AUTH_IP_WINDOW_SECONDS);
 
-  if (count > AUTH_IP_MAX_REQUESTS) {
-    res.setHeader("Retry-After", AUTH_IP_WINDOW_SECONDS.toString());
-    sendError(res, "Too many requests from this IP. Please try again in 15 minutes.", 429);
-    return;
+    if (count > AUTH_IP_MAX_REQUESTS) {
+      res.setHeader("Retry-After", AUTH_IP_WINDOW_SECONDS.toString());
+      sendError(res, "Too many requests from this IP. Please try again in 15 minutes.", 429);
+      return;
+    }
+  } catch {
+    // Fail open: never block auth because rate limiting failed.
   }
 
   next();
