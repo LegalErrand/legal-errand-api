@@ -109,12 +109,23 @@ async function main(): Promise<void> {
       console.log(`Synced waitlists: ${prodWaitlist.length}`);
     }
 
+    // Sync question bank (platform content for quiz / reasoning)
+    const prodQuestions = await prodDb.collection("questions").find({}).toArray();
+    if (prodQuestions.length) {
+      await devDb.collection("questions").deleteMany({});
+      await devDb.collection("questions").insertMany(prodQuestions, { ordered: false });
+      console.log(`Synced questions: ${prodQuestions.length}`);
+    } else {
+      console.log("No questions on prod to sync.");
+    }
+
     const destCaseLawAfter = await devDocs.countDocuments({ type: "case_law" });
     const destUploadsAfter = await devDocs.countDocuments({ type: "user_upload" });
+    const destQuestions = await devDb.collection("questions").countDocuments();
     console.log("Done.");
     console.log(`Dev case_law after: ${destCaseLawAfter}`);
     console.log(`Dev user_upload after: ${destUploadsAfter}`);
-    console.log("Note: questions are empty on both environments — nothing to copy there.");
+    console.log(`Dev questions after: ${destQuestions}`);
   } finally {
     await Promise.all([prodClient.close(), devClient.close()]);
   }
