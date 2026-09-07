@@ -9,6 +9,7 @@ import { CaseExplanation } from "../models/CaseExplanation";
 import { Conversation } from "../models/Conversation";
 import { LibraryDocument } from "../models/Document";
 import { s3Client, S3_BUCKET } from "../config/s3";
+import { AI_LIMITS } from "../config/deepseek";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   sendSuccess,
@@ -30,6 +31,104 @@ async function fetchDocumentText(s3Key: string): Promise<string> {
 }
 
 const today = () => new Date().toISOString().split("T")[0];
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Short party/citation queries like "Madukolu v. Nkemdilim (1962)". */
+function looksLikeCitationQuery(input: string): boolean {
+  const t = input.trim();
+  if (!t || t.length > 400) return false;
+  return (
+    /\bv\.?\s+/i.test(t) ||
+    /\bvs\.?\s+/i.test(t) ||
+    /\(\d{4}\)/.test(t) ||
+    /\[\d{4}\]/.test(t) ||
+    /\b(NWLR|All\s?NLR|SCNLR|WRN|NCLR)\b/i.test(t)
+  );
+}
+
+async function findLibraryCaseByQuery(query: string) {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+
+  const escaped = escapeRegex(trimmed);
+  let doc = await LibraryDocument.findOne({
+    $or: [{ "metadata.citation": new RegExp(escaped, "i") }, { title: new RegExp(escaped, "i") }],
+  }).lean();
+
+  if (doc) return doc;
+
+  const parties = trimmed
+    .split(/\s+v\.?\s+|\s+vs\.?\s+/i)
+    .map((part) =>
+      part
+        .replace(/\(\d{4}\).*$/, "")
+        .replace(/\[\d{4}\].*$/, "")
+        .trim()
+    )
+    .filter((part) => part.length > 2);
+
+  if (parties.length >= 2) {
+    doc = await LibraryDocument.findOne({
+      $and: parties.slice(0, 2).map((party) => {
+        const re = new RegExp(escapeRegex(party), "i");
+        return { $or: [{ title: re }, { "metadata.citation": re }] };
+      }),
+    }).lean();
+  }
+
+  return doc;
+}
+
+function buildCaseExplainerPrompt(caseText: string, mode: "full_text" | "citation"): string {
+  if (mode === "citation") {
+    return `You are a senior Nigerian law lecturer. The student provided only a case name and/or citation (no full judgment text). Produce a study brief for that case from established Nigerian legal knowledge.
+
+Return a JSON object in exactly this structure:
+{
+  "citation": "<Best standard citation for the case, including year and report where known>",
+  "facts": "<Plain-English summary of the material facts>",
+  "issue": "<The precise legal question(s) the court decided>",
+  "holding": "<The court's decision and who prevailed>",
+  "reasoning": "<The ratio and key legal principles applied>",
+  "significance": "<Why the case matters for Nigerian law students. Start with: 'Based on established case law knowledge (full judgment text was not supplied).'>",
+  "relatedCases": ["<Up to 5 closely related Nigerian authorities you are confident are real>"],
+  "practiceQuestions": ["<3 exam-style questions a law student could answer from this brief>"]
+}
+
+IMPORTANT RULES:
+- Only analyse the named case if you are confident it is a real authority. If unsure, set facts/issue/holding/reasoning to "Not enough confident knowledge for this citation — paste the judgment text or select it from the Library." and leave relatedCases empty.
+- Do not invent report citations, judge names, or statutes.
+- Return ONLY valid JSON. No markdown. No commentary outside the JSON.
+
+CASE NAME / CITATION:
+${caseText}`;
+  }
+
+  return `You are a senior Nigerian law lecturer. Analyze ONLY the case text provided below — do not invent or assume any facts not found in the text. Return a JSON object in exactly this structure:
+
+{
+  "citation": "<Extract the exact legal citation from the text, e.g. 'Donoghue v Stevenson [1932] AC 562'. If not found, write 'Citation not available'.>",
+  "facts": "<Plain-English summary of what happened — who the parties are, what dispute arose, and what happened procedurally. Only facts explicitly stated in the text.>",
+  "issue": "<The precise legal question(s) the court had to decide. Quote from the text where possible.>",
+  "holding": "<The court's actual decision — who won and on what ground. Only state what is in the text.>",
+  "reasoning": "<The legal principles, statutes, and precedents the court applied to reach its decision. Only reference materials explicitly mentioned in the text.>",
+  "significance": "<Why this case matters as precedent — what rule of law it established or confirmed.>",
+  "relatedCases": ["<Only include cases explicitly cited within the provided text. If none are cited, return an empty array.>"],
+  "practiceQuestions": ["<3 original exam-style questions a law student could answer using ONLY the analysis above>"]
+}
+
+IMPORTANT RULES:
+- NEVER fabricate case names, citation numbers, judge names, or statutes not found in the text.
+- If a field cannot be determined from the text, write "Not determinable from provided text."
+- relatedCases must only list cases that appear by name in the case text.
+- Return ONLY valid JSON. No markdown. No commentary outside the JSON.
+
+CASE TEXT:
+${caseText}`;
+}
 
 // ─── Standard Chat ─────────────────────────────────────────────────────────────
 
@@ -200,51 +299,98 @@ export const deleteConversation = async (req: AuthRequest, res: Response): Promi
 
 export const explainCase = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    let { caseText, documentId } = req.body;
+    const { caseText, text, citation, documentId } = req.body as {
+      caseText?: string;
+      text?: string;
+      citation?: string;
+      documentId?: string;
+    };
 
-    if (!caseText && documentId) {
-      const doc = await LibraryDocument.findById(documentId).lean();
+    let resolvedText = (caseText ?? text ?? "").trim();
+    let resolvedDocumentId = documentId?.trim() || undefined;
+    const citationInput = (citation ?? "").trim();
+    const lookupQuery = citationInput || (looksLikeCitationQuery(resolvedText) ? resolvedText : "");
+
+    if (!resolvedText && resolvedDocumentId) {
+      const doc = await LibraryDocument.findById(resolvedDocumentId).lean();
       if (!doc) {
         sendBadRequest(res, "Document not found");
         return;
       }
-      caseText = await fetchDocumentText(doc.s3Key);
+      resolvedText = await fetchDocumentText(doc.s3Key);
     }
 
-    if (!caseText) {
-      sendBadRequest(res, "Either caseText or documentId is required");
+    // Citation / case-name input: prefer a Library judgment when available.
+    if (lookupQuery && (!resolvedText || looksLikeCitationQuery(resolvedText))) {
+      const matched = await findLibraryCaseByQuery(lookupQuery);
+      if (matched?.s3Key) {
+        resolvedDocumentId = String(matched._id);
+        resolvedText = await fetchDocumentText(matched.s3Key);
+      } else if (!resolvedText) {
+        resolvedText = lookupQuery;
+      }
+    }
+
+    if (!resolvedText) {
+      sendBadRequest(
+        res,
+        "Provide a case name/citation, paste the judgment text, or select a Library document"
+      );
       return;
     }
 
-    const cacheKey = `case_explain:${Buffer.from(caseText.slice(0, 100)).toString("base64")}`;
+    const mode: "full_text" | "citation" =
+      looksLikeCitationQuery(resolvedText) && resolvedText.length <= 400 ? "citation" : "full_text";
+
+    const cacheKey = `case_explain:${mode}:${Buffer.from(resolvedText.slice(0, 120)).toString("base64")}`;
     const cached = await redisService.get(cacheKey);
 
+    const persistAndRespond = async (
+      explanation: {
+        citation: string;
+        facts: string;
+        issue: string;
+        holding: string;
+        reasoning: string;
+        significance: string;
+        relatedCases: string[];
+        practiceQuestions: string[];
+      },
+      message: string
+    ) => {
+      const saved = await CaseExplanation.create({
+        userId: req.user!.userId,
+        documentId: resolvedDocumentId ?? undefined,
+        inputText: resolvedText.slice(0, 500),
+        ...explanation,
+      });
+
+      await Progress.findOneAndUpdate(
+        { userId: req.user!.userId, date: today() },
+        { $inc: { casesExplained: 1 } },
+        { upsert: true, new: true }
+      );
+
+      const id = saved._id.toString();
+      sendSuccess(res, { ...explanation, id, _id: id }, message);
+    };
+
     if (cached) {
-      sendSuccess(res, cached, "Case explanation (cached)");
+      await persistAndRespond(
+        cached as {
+          citation: string;
+          facts: string;
+          issue: string;
+          holding: string;
+          reasoning: string;
+          significance: string;
+          relatedCases: string[];
+          practiceQuestions: string[];
+        },
+        "Case explanation (cached)"
+      );
       return;
     }
-
-    const prompt = `You are a senior Nigerian law lecturer. Analyze ONLY the case text provided below — do not invent or assume any facts not found in the text. Return a JSON object in exactly this structure:
-
-{
-  "citation": "<Extract the exact legal citation from the text, e.g. 'Donoghue v Stevenson [1932] AC 562'. If not found, write 'Citation not available'.>",
-  "facts": "<Plain-English summary of what happened — who the parties are, what dispute arose, and what happened procedurally. Only facts explicitly stated in the text.>",
-  "issue": "<The precise legal question(s) the court had to decide. Quote from the text where possible.>",
-  "holding": "<The court's actual decision — who won and on what ground. Only state what is in the text.>",
-  "reasoning": "<The legal principles, statutes, and precedents the court applied to reach its decision. Only reference materials explicitly mentioned in the text.>",
-  "significance": "<Why this case matters as precedent — what rule of law it established or confirmed.>",
-  "relatedCases": ["<Only include cases explicitly cited within the provided text. If none are cited, return an empty array.>"],
-  "practiceQuestions": ["<3 original exam-style questions a law student could answer using ONLY the analysis above>"]
-}
-
-IMPORTANT RULES:
-- NEVER fabricate case names, citation numbers, judge names, or statutes not found in the text.
-- If a field cannot be determined from the text, write "Not determinable from provided text."
-- relatedCases must only list cases that appear by name in the case text.
-- Return ONLY valid JSON. No markdown. No commentary outside the JSON.
-
-CASE TEXT:
-${caseText}`;
 
     const explanation = await deepseekService.structuredCompletion<{
       citation: string;
@@ -255,25 +401,14 @@ ${caseText}`;
       significance: string;
       relatedCases: string[];
       practiceQuestions: string[];
-    }>(prompt);
-
-    await redisService.set(cacheKey, explanation, 86400);
-
-    // Persist to MongoDB so user has an archive
-    const saved = await CaseExplanation.create({
-      userId: req.user!.userId,
-      documentId: documentId ?? undefined,
-      inputText: caseText.slice(0, 500),
-      ...explanation,
-    });
-
-    await Progress.findOneAndUpdate(
-      { userId: req.user!.userId, date: today() },
-      { $inc: { casesExplained: 1 } },
-      { upsert: true, new: true }
+    }>(
+      buildCaseExplainerPrompt(resolvedText, mode),
+      undefined,
+      AI_LIMITS.MAX_TOKENS.CASE_EXPLAINER
     );
 
-    sendSuccess(res, { ...explanation, _id: saved._id }, "Case explained");
+    await redisService.set(cacheKey, explanation, 86400);
+    await persistAndRespond(explanation, "Case explained");
   } catch (err) {
     sendError(res, "Case explanation failed", 500, (err as Error).message);
   }
@@ -289,11 +424,21 @@ export const getCaseExplainerHistory = async (req: AuthRequest, res: Response): 
         .select("citation facts issue holding significance createdAt savedToNoteId")
         .skip(skip)
         .limit(parseInt(limit as string))
-        .sort({ createdAt: -1 }),
+        .sort({ createdAt: -1 })
+        .lean(),
       CaseExplanation.countDocuments({ userId: req.user!.userId }),
     ]);
 
-    sendSuccess(res, explanations, "Case explainer history retrieved", 200, { total });
+    sendSuccess(
+      res,
+      explanations.map((item) => ({
+        ...item,
+        id: String(item._id),
+      })),
+      "Case explainer history retrieved",
+      200,
+      { total }
+    );
   } catch (err) {
     sendError(res, "Failed to retrieve case history", 500, (err as Error).message);
   }
