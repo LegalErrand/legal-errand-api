@@ -28,6 +28,7 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3001",
   "https://dev.legalerrand.com",
   "https://legalerrand.com",
+  "https://academy.legalerrand.com",
   "https://admin.legalerrand.com",
 ];
 
