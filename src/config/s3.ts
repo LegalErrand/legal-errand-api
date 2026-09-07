@@ -7,6 +7,9 @@ export const s3Client = new S3Client({
     accessKeyId: env.AWS_ACCESS_KEY_ID,
     secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
   },
+  // Avoid optional checksum headers that break browser XHR PUTs to presigned URLs.
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 export const S3_BUCKET = env.AWS_S3_BUCKET;

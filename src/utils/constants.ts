@@ -55,7 +55,7 @@ export const REDIS_KEYS = {
   AI_QUERY_COUNT: (userId: string) => `ai:queries:${userId}:${today()}`,
   RESEARCH_SESSION_COUNT: (userId: string) => `research:sessions:${userId}:${today()}`,
   CONVERSATION: (sessionId: string) => `conv:${sessionId}`,
-  DASHBOARD_CACHE: (userId: string) => `dashboard:${userId}`,
+  DASHBOARD_CACHE: (userId: string) => `dashboard:v2:${userId}`,
   USER_SESSION: (userId: string) => `session:${userId}`,
 } as const;
 
