@@ -61,7 +61,10 @@ export const getDashboard = async (req: AuthRequest, res: Response): Promise<voi
         lastActive: recentProgress[recentProgress.length - 1]?.date ?? null,
       },
       reasoningScore: latestScore,
-      subjectMastery: subjectScores,
+      subjectMastery: Object.entries(subjectScores).map(([subject, score]) => ({
+        subject,
+        score,
+      })),
       weakAreas,
       recentActivity: recentProgress.slice(-7),
       activeGoals,

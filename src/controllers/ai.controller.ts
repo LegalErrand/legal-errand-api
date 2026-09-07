@@ -223,9 +223,14 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
   const sid = sessionId ?? uuidv4();
   const history = ((await redisService.getConversation(sid)) as ConversationMessage[]) ?? [];
 
-  const systemContext = documentContext
-    ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
-    : undefined;
+  const systemContext = [
+    documentContext
+      ? `The student is currently reading: ${documentContext}. Answer questions in context of this document.`
+      : null,
+    "Keep responses concise and conversational — 2 to 5 short paragraphs. Write in plain prose without markdown tables, headers, or bullet lists.",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -246,6 +251,21 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
     if (!fullReply.trim()) {
       res.write(
         `data: ${JSON.stringify({ error: "The AI returned an empty reply. Please try again." })}\n\n`
+      );
+      res.end();
+      return;
+    }
+
+    // Do not persist truncated table/markdown stubs so non-stream fallback can retry cleanly.
+    const trimmed = fullReply.trim();
+    const looksTruncated =
+      trimmed.length < 40 ||
+      /\|$/.test(trimmed) ||
+      /Section\s*\|$/i.test(trimmed) ||
+      /^[A-Z]$/.test(trimmed);
+    if (looksTruncated) {
+      res.write(
+        `data: ${JSON.stringify({ error: "The AI returned an incomplete reply. Please try again." })}\n\n`
       );
       res.end();
       return;
