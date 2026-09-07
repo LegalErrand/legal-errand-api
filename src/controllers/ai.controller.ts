@@ -21,13 +21,28 @@ import {
 import { v4 as uuidv4 } from "uuid";
 
 async function fetchDocumentText(s3Key: string): Promise<string> {
+  // Binary PDFs cannot be read as UTF-8 without a parser — skip extraction.
+  if (/\.pdf$/i.test(s3Key)) {
+    return "";
+  }
+
   const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key });
   const response = await s3Client.send(command);
   const chunks: Uint8Array[] = [];
   for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString("utf-8").slice(0, 15000);
+  const text = Buffer.concat(chunks).toString("utf-8").slice(0, 15000);
+  // Heuristic: if most bytes are non-printable, this is not usable judgment text.
+  const sample = text.slice(0, 500);
+  const nonPrintable = Array.from(sample).filter((ch) => {
+    const code = ch.charCodeAt(0);
+    return !(code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 126));
+  }).length;
+  if (sample.length > 40 && nonPrintable / sample.length > 0.3) {
+    return "";
+  }
+  return text;
 }
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -213,8 +228,12 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
     : undefined;
 
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
 
   let fullReply = "";
 
@@ -222,6 +241,14 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
     for await (const chunk of deepseekService.streamChat(message, history, systemContext)) {
       fullReply += chunk;
       res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+    }
+
+    if (!fullReply.trim()) {
+      res.write(
+        `data: ${JSON.stringify({ error: "The AI returned an empty reply. Please try again." })}\n\n`
+      );
+      res.end();
+      return;
     }
 
     const updatedHistory: ConversationMessage[] = [
@@ -250,8 +277,9 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
 
     res.write(`data: ${JSON.stringify({ done: true, sessionId: sid })}\n\n`);
     res.end();
-  } catch {
-    res.write(`data: ${JSON.stringify({ error: "Stream failed" })}\n\n`);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "Stream failed";
+    res.write(`data: ${JSON.stringify({ error: detail })}\n\n`);
     res.end();
   }
 };
@@ -317,15 +345,27 @@ export const explainCase = async (req: AuthRequest, res: Response): Promise<void
         sendBadRequest(res, "Document not found");
         return;
       }
-      resolvedText = await fetchDocumentText(doc.s3Key);
+      const extracted = await fetchDocumentText(doc.s3Key);
+      if (extracted) {
+        resolvedText = extracted;
+      } else {
+        // PDF / binary uploads: fall back to title/citation for a knowledge brief.
+        resolvedText = (doc.metadata?.citation || doc.title || lookupQuery || "").trim();
+      }
     }
 
     // Citation / case-name input: prefer a Library judgment when available.
     if (lookupQuery && (!resolvedText || looksLikeCitationQuery(resolvedText))) {
       const matched = await findLibraryCaseByQuery(lookupQuery);
-      if (matched?.s3Key) {
+      if (matched) {
         resolvedDocumentId = String(matched._id);
-        resolvedText = await fetchDocumentText(matched.s3Key);
+        const extracted = matched.s3Key ? await fetchDocumentText(matched.s3Key) : "";
+        if (extracted) {
+          resolvedText = extracted;
+        } else {
+          resolvedText =
+            resolvedText || (matched.metadata?.citation || matched.title || lookupQuery).trim();
+        }
       } else if (!resolvedText) {
         resolvedText = lookupQuery;
       }
@@ -547,7 +587,13 @@ export const startSocraticSession = async (req: AuthRequest, res: Response): Pro
 
 export const respondSocratic = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { sessionId, response: studentResponse, requestHint } = req.body;
+    const { sessionId, response, message, requestHint } = req.body as {
+      sessionId?: string;
+      response?: string;
+      message?: string;
+      requestHint?: boolean;
+    };
+    const studentResponse = (response ?? message ?? "").trim();
     if (!sessionId) {
       sendBadRequest(res, "sessionId is required");
       return;
@@ -606,7 +652,14 @@ export const endSocraticSession = async (req: AuthRequest, res: Response): Promi
 
     const summary = await socraticService.generateSessionSummary(session.messages, session.topic);
     await redisService.del(`socratic:${sessionId}`);
-    sendSuccess(res, summary, "Session ended");
+    sendSuccess(
+      res,
+      {
+        ...summary,
+        score: summary.understanding,
+      },
+      "Session ended"
+    );
   } catch (err) {
     sendError(res, "Failed to end session", 500, (err as Error).message);
   }

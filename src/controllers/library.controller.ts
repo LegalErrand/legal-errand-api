@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { AuthRequest } from "../types";
 import { LibraryDocument } from "../models/Document";
 import { s3Service } from "../services/storage/s3.service";
+import { LAW_SUBJECTS } from "../utils/constants";
 import {
   sendSuccess,
   sendCreated,
@@ -281,20 +282,38 @@ export const completeDocumentUpload = async (req: AuthRequest, res: Response): P
       return;
     }
 
+    const rawSubject = typeof subject === "string" ? subject.trim() : "";
+    const matchedSubject = LAW_SUBJECTS.find((s) => s.toLowerCase() === rawSubject.toLowerCase());
+    // Free-text subjects (e.g. "Tax law") are not in the enum — keep them as description.
+    const metadata =
+      rawSubject && !matchedSubject
+        ? { description: rawSubject, jurisdiction: "Nigeria" }
+        : undefined;
+
     const doc = await LibraryDocument.create({
       title,
       type: "user_upload",
-      subject,
+      subject: matchedSubject,
       s3Key,
       s3Url,
       fileSize: parsedFileSize,
       uploadedBy: req.user!.userId,
       isLibraryContent: false,
+      ...(metadata ? { metadata } : {}),
     });
 
     sendCreated(res, doc, "Document uploaded successfully");
   } catch (err) {
-    sendError(res, "Document upload failed", 500, (err as Error).message);
+    const detail = err instanceof Error ? err.message : undefined;
+    if (detail && /validation failed|enum/i.test(detail)) {
+      sendBadRequest(
+        res,
+        "Invalid document fields. Pick a subject from the list or leave it blank.",
+        detail
+      );
+      return;
+    }
+    sendError(res, "Document upload failed", 500, detail);
   }
 };
 
