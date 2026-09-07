@@ -7,6 +7,7 @@ import { Progress } from "../models/Progress";
 import { Note } from "../models/Note";
 import { CaseExplanation } from "../models/CaseExplanation";
 import { Conversation } from "../models/Conversation";
+import type { IConversationMessage } from "../models/Conversation";
 import { LibraryDocument } from "../models/Document";
 import { s3Client, S3_BUCKET } from "../config/s3";
 import { AI_LIMITS } from "../config/deepseek";
@@ -19,6 +20,16 @@ import {
   sendError,
 } from "../utils/response";
 import { v4 as uuidv4 } from "uuid";
+
+function toStoredMessages(history: ConversationMessage[]): IConversationMessage[] {
+  return history
+    .filter((m): m is ConversationMessage & { role: "user" | "assistant" } => m.role !== "system")
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp),
+    }));
+}
 
 async function fetchDocumentText(s3Key: string): Promise<string> {
   // Binary PDFs cannot be read as UTF-8 without a parser — skip extraction.
@@ -181,7 +192,7 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
 
     await redisService.setConversation(sid, updatedHistory);
 
-    // Persist conversation metadata to MongoDB for history listing
+    // Persist conversation metadata + full transcript for sidebar history
     if (isNew) {
       await Conversation.create({
         userId: req.user!.userId,
@@ -190,11 +201,16 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
         messageCount: 1,
         lastMessage: reply.slice(0, 120),
         mode: "standard",
+        messages: toStoredMessages(updatedHistory),
       });
     } else {
       await Conversation.findOneAndUpdate(
-        { sessionId: sid },
-        { $inc: { messageCount: 1 }, lastMessage: reply.slice(0, 120) }
+        { sessionId: sid, userId: req.user!.userId },
+        {
+          $inc: { messageCount: 1 },
+          lastMessage: reply.slice(0, 120),
+          messages: toStoredMessages(updatedHistory),
+        }
       );
     }
 
@@ -287,13 +303,24 @@ export const streamChat = async (req: AuthRequest, res: Response): Promise<void>
         messageCount: 1,
         lastMessage: fullReply.slice(0, 120),
         mode: "standard",
+        messages: toStoredMessages(updatedHistory),
       });
     } else {
       await Conversation.findOneAndUpdate(
-        { sessionId: sid },
-        { $inc: { messageCount: 1 }, lastMessage: fullReply.slice(0, 120) }
+        { sessionId: sid, userId: req.user!.userId },
+        {
+          $inc: { messageCount: 1 },
+          lastMessage: fullReply.slice(0, 120),
+          messages: toStoredMessages(updatedHistory),
+        }
       );
     }
+
+    await Progress.findOneAndUpdate(
+      { userId: req.user!.userId, date: today() },
+      { $inc: { aiQueriesCount: 1 } },
+      { upsert: true, new: true }
+    );
 
     res.write(`data: ${JSON.stringify({ done: true, sessionId: sid })}\n\n`);
     res.end();
@@ -313,6 +340,7 @@ export const getConversations = async (req: AuthRequest, res: Response): Promise
 
     const [conversations, total] = await Promise.all([
       Conversation.find({ userId: req.user!.userId, mode: "standard" })
+        .select("-messages")
         .skip(skip)
         .limit(parseInt(limit as string))
         .sort({ updatedAt: -1 }),
@@ -322,6 +350,47 @@ export const getConversations = async (req: AuthRequest, res: Response): Promise
     sendSuccess(res, conversations, "Conversations retrieved", 200, { total });
   } catch (err) {
     sendError(res, "Failed to retrieve conversations", 500, (err as Error).message);
+  }
+};
+
+export const getConversation = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const sessionId = String(req.params.sessionId ?? "");
+    const convo = await Conversation.findOne({
+      sessionId,
+      userId: req.user!.userId,
+    });
+    if (!convo) {
+      sendNotFound(res, "Conversation not found");
+      return;
+    }
+
+    let messages: IConversationMessage[] = convo.messages ?? [];
+    if (!messages.length) {
+      const cached = (await redisService.getConversation(sessionId)) as
+        | ConversationMessage[]
+        | null;
+      if (cached?.length) messages = toStoredMessages(cached);
+    }
+
+    sendSuccess(
+      res,
+      {
+        sessionId: convo.sessionId,
+        title: convo.title,
+        messageCount: convo.messageCount,
+        lastMessage: convo.lastMessage,
+        createdAt: (convo as unknown as { createdAt: Date }).createdAt,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })),
+      },
+      "Conversation retrieved"
+    );
+  } catch (err) {
+    sendError(res, "Failed to retrieve conversation", 500, (err as Error).message);
   }
 };
 

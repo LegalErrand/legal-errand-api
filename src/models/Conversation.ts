@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
 export interface IConversationDocument extends Document {
   userId: mongoose.Types.ObjectId;
   sessionId: string;
@@ -7,7 +13,17 @@ export interface IConversationDocument extends Document {
   messageCount: number;
   lastMessage: string;
   mode: "standard" | "socratic";
+  messages: IConversationMessage[];
 }
+
+const ConversationMessageSchema = new Schema<IConversationMessage>(
+  {
+    role: { type: String, enum: ["user", "assistant"], required: true },
+    content: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const ConversationSchema = new Schema<IConversationDocument>(
   {
@@ -17,6 +33,7 @@ const ConversationSchema = new Schema<IConversationDocument>(
     messageCount: { type: Number, default: 1 },
     lastMessage: { type: String, default: "" },
     mode: { type: String, enum: ["standard", "socratic"], default: "standard" },
+    messages: { type: [ConversationMessageSchema], default: [] },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

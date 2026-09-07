@@ -7,6 +7,7 @@ import {
   respondSocratic,
   endSocraticSession,
   getConversations,
+  getConversation,
   deleteConversation,
   getCaseExplainerHistory,
   getCaseExplanation,
@@ -25,6 +26,7 @@ router.post("/chat/stream", aiQueryRateLimit, streamChat);
 
 // Conversation history
 router.get("/conversations", getConversations);
+router.get("/conversations/:sessionId", getConversation);
 router.delete("/conversations/:sessionId", deleteConversation);
 
 // Case explainer
