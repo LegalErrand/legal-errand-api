@@ -9,11 +9,13 @@ import {
   getBulkPresignedUploadUrls,
   completeDocumentUpload,
   completeBulkDocumentUpload,
+  uploadDocumentDirect,
   getDocumentSignedUrl,
   bookmarkDocument,
   deleteDocument,
 } from "../controllers/library.controller";
 import { authenticate } from "../middleware/auth.middleware";
+import { uploadPDF } from "../middleware/upload.middleware";
 
 const router = Router();
 
@@ -22,6 +24,7 @@ router.use(authenticate);
 router.get("/", getLibrary); // Browse platform library
 router.get("/bookmarks", getBookmarks); // User's bookmarked documents
 router.get("/my-documents", getMyDocuments); // User's own uploads
+router.post("/upload", uploadPDF, uploadDocumentDirect); // Multipart upload via API (mobile-safe)
 router.post("/upload-url", getPresignedUploadUrl); // Single presigned upload URL
 router.post("/upload-urls/bulk", getBulkPresignedUploadUrls); // Bulk presigned upload URLs (max 20)
 router.post("/upload/complete", completeDocumentUpload); // Save single upload metadata

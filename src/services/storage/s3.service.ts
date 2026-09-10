@@ -69,7 +69,11 @@ export const s3Service = {
       ContentType: mimeType,
     });
 
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: expiresInSeconds });
+    // Sign content-type so browser PUTs stay compatible; avoid checksum headers that break XHR.
+    const uploadUrl = await getSignedUrl(s3Client, command, {
+      expiresIn: expiresInSeconds,
+      signableHeaders: new Set(["content-type"]),
+    });
     const s3Url = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
 
     return { uploadUrl, s3Key, s3Url };

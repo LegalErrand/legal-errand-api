@@ -23,6 +23,45 @@ STYLE:
 - Use plain prose for explanations; avoid markdown tables or bullet lists unless the format specifically requires it.
 - Distinguish obiter dicta from ratio decidendi when analyzing cases.`;
 
+/**
+ * Models often wrap JSON in ``` fences or add leading/trailing prose.
+ * Extract the first parseable JSON object/array from the model output.
+ */
+export function parseAiJson<T>(raw: string): T {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) {
+    throw new Error("AI returned empty response");
+  }
+
+  const candidates: string[] = [trimmed];
+
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence?.[1]) candidates.push(fence[1].trim());
+
+  const objStart = trimmed.indexOf("{");
+  const objEnd = trimmed.lastIndexOf("}");
+  if (objStart !== -1 && objEnd > objStart) {
+    candidates.push(trimmed.slice(objStart, objEnd + 1));
+  }
+
+  const arrStart = trimmed.indexOf("[");
+  const arrEnd = trimmed.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    candidates.push(trimmed.slice(arrStart, arrEnd + 1));
+  }
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("AI returned invalid JSON");
+}
+
 export const deepseekService = {
   /**
    * Single-turn chat (context-free)
@@ -77,7 +116,7 @@ export const deepseekService = {
   },
 
   /**
-   * Structured JSON response (for grading, scoring, etc.)
+   * Structured JSON response (for grading, scoring, case explainer, etc.)
    */
   async structuredCompletion<T>(
     prompt: string,
@@ -86,24 +125,53 @@ export const deepseekService = {
   ): Promise<T> {
     const systemPrompt = `${NIGERIAN_LAW_SYSTEM_PROMPT}${systemContext ? `\n\n${systemContext}` : ""}
 
-Respond ONLY with valid JSON. No markdown, no prose outside the JSON.`;
+Respond ONLY with a single valid JSON object. No markdown fences. No prose outside the JSON.`;
 
-    const response = await aiClient.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.3, // Lower temperature for structured outputs
-    });
+    const requestOnce = async (userPrompt: string, useJsonMode: boolean): Promise<string> => {
+      try {
+        const response = await aiClient.chat.completions.create({
+          model: AI_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: maxTokens,
+          temperature: 0.2,
+          ...(useJsonMode ? { response_format: { type: "json_object" as const } } : {}),
+        });
+        return response.choices[0]?.message?.content ?? "";
+      } catch (err) {
+        // Some model/proxy combos reject response_format — retry without it.
+        if (useJsonMode) {
+          logger.warn("JSON response_format rejected — falling back to plain completion", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return requestOnce(userPrompt, false);
+        }
+        throw err;
+      }
+    };
 
-    const raw = response.choices[0]?.message?.content ?? "{}";
+    let raw = await requestOnce(prompt, true);
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      logger.error("Failed to parse AI structured response:", raw);
-      throw new Error("AI returned invalid JSON");
+      return parseAiJson<T>(raw);
+    } catch (firstErr) {
+      logger.warn("AI structured JSON parse failed — retrying once", {
+        preview: raw.slice(0, 240),
+        error: firstErr instanceof Error ? firstErr.message : String(firstErr),
+      });
+
+      raw = await requestOnce(
+        `Your previous reply was not valid JSON. Convert it into ONE valid JSON object that matches the required schema. Output JSON only.\n\nPREVIOUS REPLY:\n${raw.slice(0, 6000)}`,
+        true
+      );
+
+      try {
+        return parseAiJson<T>(raw);
+      } catch {
+        logger.error("Failed to parse AI structured response after retry:", raw.slice(0, 800));
+        throw new Error("AI returned invalid JSON");
+      }
     }
   },
 

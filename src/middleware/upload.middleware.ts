@@ -2,7 +2,13 @@ import multer from "multer";
 import { AppError } from "./error.middleware";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB (as per PRD)
-const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "application/octet-stream", // iOS/Safari often reports PDFs this way
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
 
 const storage = multer.memoryStorage();
 
@@ -11,7 +17,10 @@ const fileFilter = (
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+  const isPdfName = /\.pdf$/i.test(file.originalname);
+  if (ALLOWED_MIME_TYPES.includes(file.mimetype) || (isPdfName && !file.mimetype)) {
+    cb(null, true);
+  } else if (isPdfName && file.mimetype === "application/octet-stream") {
     cb(null, true);
   } else {
     cb(new AppError(`Invalid file type. Allowed: PDF, JPEG, PNG, WebP`, 400));

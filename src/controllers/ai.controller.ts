@@ -125,7 +125,8 @@ Return a JSON object in exactly this structure:
 }
 
 IMPORTANT RULES:
-- Only analyse the named case if you are confident it is a real authority. If unsure, set facts/issue/holding/reasoning to "Not enough confident knowledge for this citation — paste the judgment text or select it from the Library." and leave relatedCases empty.
+- Common-law authorities that Nigerian courts still apply (e.g. Donoghue v Stevenson) are in scope — analyse them normally and note their reception in Nigerian law in significance.
+- Only refuse if you are not confident the named case is a real authority. If unsure, set facts/issue/holding/reasoning to "Not enough confident knowledge for this citation — paste the judgment text or select it from the Library." and leave relatedCases empty.
 - Do not invent report citations, judge names, or statutes.
 - Return ONLY valid JSON. No markdown. No commentary outside the JSON.
 
