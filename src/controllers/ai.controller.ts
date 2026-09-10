@@ -62,6 +62,75 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+type CaseBrief = {
+  citation: string;
+  facts: string;
+  issue: string;
+  holding: string;
+  reasoning: string;
+  significance: string;
+  relatedCases: string[];
+  practiceQuestions: string[];
+};
+
+function asBriefString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function asBriefStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        return asBriefString(obj.citation ?? obj.name ?? obj.title ?? obj.question ?? obj.text);
+      }
+      return asBriefString(item);
+    })
+    .filter(Boolean);
+}
+
+/** Map common model key variants into our CaseExplanation schema. */
+function normalizeCaseBrief(raw: unknown): CaseBrief {
+  const obj =
+    raw && typeof raw === "object"
+      ? (raw as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const nested =
+    obj.analysis && typeof obj.analysis === "object"
+      ? (obj.analysis as Record<string, unknown>)
+      : obj;
+
+  return {
+    citation: asBriefString(nested.citation ?? nested.Citation ?? nested.caseName ?? obj.citation),
+    facts: asBriefString(nested.facts ?? nested.Facts ?? nested.fact ?? nested.summary),
+    issue: asBriefString(nested.issue ?? nested.Issue ?? nested.issues ?? nested.legalIssue),
+    holding: asBriefString(
+      nested.holding ?? nested.Holding ?? nested.decision ?? nested.judgment ?? nested.ratio
+    ),
+    reasoning: asBriefString(nested.reasoning ?? nested.Reasoning ?? nested.ratioDecidendi),
+    significance: asBriefString(
+      nested.significance ?? nested.Significance ?? nested.importance ?? nested.whyItMatters
+    ),
+    relatedCases: asBriefStringArray(
+      nested.relatedCases ?? nested.RelatedCases ?? nested.related_cases ?? nested.authorities
+    ),
+    practiceQuestions: asBriefStringArray(
+      nested.practiceQuestions ??
+        nested.PracticeQuestions ??
+        nested.practice_questions ??
+        nested.questions
+    ),
+  };
+}
+
+function isCaseBriefComplete(brief: CaseBrief): boolean {
+  return Boolean(brief.facts && brief.issue && brief.holding);
+}
+
 /** Short party/citation queries like "Madukolu v. Nkemdilim (1962)". */
 function looksLikeCitationQuery(input: string): boolean {
   const t = input.trim();
@@ -475,19 +544,7 @@ export const explainCase = async (req: AuthRequest, res: Response): Promise<void
     const cacheKey = `case_explain:${mode}:${Buffer.from(resolvedText.slice(0, 120)).toString("base64")}`;
     const cached = await redisService.get(cacheKey);
 
-    const persistAndRespond = async (
-      explanation: {
-        citation: string;
-        facts: string;
-        issue: string;
-        holding: string;
-        reasoning: string;
-        significance: string;
-        relatedCases: string[];
-        practiceQuestions: string[];
-      },
-      message: string
-    ) => {
+    const persistAndRespond = async (explanation: CaseBrief, message: string) => {
       const saved = await CaseExplanation.create({
         userId: req.user!.userId,
         documentId: resolvedDocumentId ?? undefined,
@@ -506,38 +563,49 @@ export const explainCase = async (req: AuthRequest, res: Response): Promise<void
     };
 
     if (cached) {
-      await persistAndRespond(
-        cached as {
-          citation: string;
-          facts: string;
-          issue: string;
-          holding: string;
-          reasoning: string;
-          significance: string;
-          relatedCases: string[];
-          practiceQuestions: string[];
-        },
-        "Case explanation (cached)"
-      );
-      return;
+      const cachedBrief = normalizeCaseBrief(cached);
+      if (isCaseBriefComplete(cachedBrief)) {
+        await persistAndRespond(cachedBrief, "Case explanation (cached)");
+        return;
+      }
+      // Drop incomplete cache entries from earlier bad model replies.
+      await redisService.del(cacheKey);
     }
 
-    const explanation = await deepseekService.structuredCompletion<{
-      citation: string;
-      facts: string;
-      issue: string;
-      holding: string;
-      reasoning: string;
-      significance: string;
-      relatedCases: string[];
-      practiceQuestions: string[];
-    }>(
-      buildCaseExplainerPrompt(resolvedText, mode),
-      undefined,
-      AI_LIMITS.MAX_TOKENS.CASE_EXPLAINER
+    let explanation = normalizeCaseBrief(
+      await deepseekService.structuredCompletion<Record<string, unknown>>(
+        buildCaseExplainerPrompt(resolvedText, mode),
+        undefined,
+        AI_LIMITS.MAX_TOKENS.CASE_EXPLAINER
+      )
     );
 
-    await redisService.set(cacheKey, explanation, 86400);
+    // One repair pass if the model returned valid JSON but left core fields empty.
+    if (!isCaseBriefComplete(explanation)) {
+      explanation = normalizeCaseBrief(
+        await deepseekService.structuredCompletion<Record<string, unknown>>(
+          `Fill EVERY field in this case-brief JSON. Do not leave facts, issue, or holding empty.
+
+CASE NAME / TEXT:
+${resolvedText.slice(0, 4000)}
+
+CURRENT (incomplete) JSON:
+${JSON.stringify(explanation)}
+
+Return the complete JSON object with keys: citation, facts, issue, holding, reasoning, significance, relatedCases, practiceQuestions.`,
+          undefined,
+          AI_LIMITS.MAX_TOKENS.CASE_EXPLAINER
+        )
+      );
+    }
+
+    if (!explanation.citation) {
+      explanation.citation = resolvedText.slice(0, 160);
+    }
+
+    if (isCaseBriefComplete(explanation)) {
+      await redisService.set(cacheKey, explanation, 86400);
+    }
     await persistAndRespond(explanation, "Case explained");
   } catch (err) {
     sendError(res, "Case explanation failed", 500, (err as Error).message);
