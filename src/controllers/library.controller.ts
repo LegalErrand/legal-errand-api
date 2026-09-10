@@ -317,6 +317,72 @@ export const completeDocumentUpload = async (req: AuthRequest, res: Response): P
   }
 };
 
+/**
+ * Browser → API → S3 upload. Avoids fragile direct-to-S3 CORS/XHR on mobile Safari.
+ * Expects multipart field `file` plus `title` and optional `subject`.
+ */
+export const uploadDocumentDirect = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const file = req.file;
+    const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
+    const subject = typeof req.body.subject === "string" ? req.body.subject.trim() : "";
+
+    if (!file) {
+      sendBadRequest(res, "PDF file is required");
+      return;
+    }
+    if (!title) {
+      sendBadRequest(res, "Document title is required");
+      return;
+    }
+
+    const isPdf =
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/octet-stream" ||
+      /\.pdf$/i.test(file.originalname);
+    if (!isPdf) {
+      sendBadRequest(res, "Only PDF files are supported");
+      return;
+    }
+
+    const { s3Key, s3Url } = await s3Service.uploadFile(
+      file.buffer,
+      file.originalname.endsWith(".pdf") ? file.originalname : `${file.originalname}.pdf`,
+      "application/pdf",
+      "DOCUMENTS"
+    );
+
+    const matchedSubject = LAW_SUBJECTS.find((s) => s.toLowerCase() === subject.toLowerCase());
+    const metadata =
+      subject && !matchedSubject ? { description: subject, jurisdiction: "Nigeria" } : undefined;
+
+    const doc = await LibraryDocument.create({
+      title,
+      type: "user_upload",
+      subject: matchedSubject,
+      s3Key,
+      s3Url,
+      fileSize: file.size,
+      uploadedBy: req.user!.userId,
+      isLibraryContent: false,
+      ...(metadata ? { metadata } : {}),
+    });
+
+    sendCreated(res, doc, "Document uploaded successfully");
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : undefined;
+    if (detail && /validation failed|enum/i.test(detail)) {
+      sendBadRequest(
+        res,
+        "Invalid document fields. Pick a subject from the list or leave it blank.",
+        detail
+      );
+      return;
+    }
+    sendError(res, "Document upload failed", 500, detail);
+  }
+};
+
 export const getDocumentSignedUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const doc = await LibraryDocument.findById(req.params.id);
