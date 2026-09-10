@@ -9,6 +9,7 @@ import researchRoutes from "./research.routes";
 import waitlistRoutes from "./waitlist.routes";
 import userRoutes from "./user.routes";
 import adminRoutes from "./admin";
+import firmRoutes from "./firm";
 import { isRedisAvailable } from "../config/redis";
 
 const router = Router();
@@ -32,5 +33,6 @@ router.use("/research", researchRoutes);
 router.use("/waitlist", waitlistRoutes);
 router.use("/user", userRoutes);
 router.use("/admin", adminRoutes);
+router.use("/firm", firmRoutes);
 
 export default router;

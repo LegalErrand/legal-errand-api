@@ -15,7 +15,8 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "prepare": "node scripts/prepare-husky.js",
     "sync:prod-to-dev": "ts-node --transpile-only src/scripts/syncProdContentToDev.ts",
-    "seed:questions": "ts-node --transpile-only src/scripts/seedQuestions.ts"
+    "seed:questions": "ts-node --transpile-only src/scripts/seedQuestions.ts",
+    "seed:firm": "ts-node --transpile-only src/scripts/seedFirmData.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
