@@ -26,9 +26,14 @@ const ALLOWED_ORIGINS = [
   env.CLIENT_URL,
   "http://localhost:3000",
   "http://localhost:3001",
+  // Academy (student web app)
+  "https://dev-academy.legalerrand.com",
+  "https://academy.legalerrand.com",
+  // Marketing / main site
   "https://dev.legalerrand.com",
   "https://legalerrand.com",
-  "https://academy.legalerrand.com",
+  "https://www.legalerrand.com",
+  // Admin
   "https://admin.legalerrand.com",
 ];
 
