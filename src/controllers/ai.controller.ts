@@ -9,9 +9,7 @@ import { CaseExplanation } from "../models/CaseExplanation";
 import { Conversation } from "../models/Conversation";
 import type { IConversationMessage } from "../models/Conversation";
 import { LibraryDocument } from "../models/Document";
-import { s3Client, S3_BUCKET } from "../config/s3";
 import { AI_LIMITS } from "../config/deepseek";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   sendSuccess,
   sendCreated,
@@ -20,6 +18,7 @@ import {
   sendError,
 } from "../utils/response";
 import { v4 as uuidv4 } from "uuid";
+import { extractDocumentText } from "../services/storage/documentText.service";
 
 function toStoredMessages(history: ConversationMessage[]): IConversationMessage[] {
   return history
@@ -32,28 +31,12 @@ function toStoredMessages(history: ConversationMessage[]): IConversationMessage[
 }
 
 async function fetchDocumentText(s3Key: string): Promise<string> {
-  // Binary PDFs cannot be read as UTF-8 without a parser — skip extraction.
-  if (/\.pdf$/i.test(s3Key)) {
+  try {
+    const { text } = await extractDocumentText({ s3Key });
+    return text;
+  } catch {
     return "";
   }
-
-  const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key });
-  const response = await s3Client.send(command);
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
-    chunks.push(chunk);
-  }
-  const text = Buffer.concat(chunks).toString("utf-8").slice(0, 15000);
-  // Heuristic: if most bytes are non-printable, this is not usable judgment text.
-  const sample = text.slice(0, 500);
-  const nonPrintable = Array.from(sample).filter((ch) => {
-    const code = ch.charCodeAt(0);
-    return !(code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 126));
-  }).length;
-  if (sample.length > 40 && nonPrintable / sample.length > 0.3) {
-    return "";
-  }
-  return text;
 }
 
 const today = () => new Date().toISOString().split("T")[0];

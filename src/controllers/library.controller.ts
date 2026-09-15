@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { AuthRequest } from "../types";
 import { LibraryDocument } from "../models/Document";
 import { s3Service } from "../services/storage/s3.service";
+import { detectDocumentKind, extractDocumentText } from "../services/storage/documentText.service";
 import { LAW_SUBJECTS } from "../utils/constants";
 import {
   sendSuccess,
@@ -110,7 +111,19 @@ export const getDocument = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    sendSuccess(res, withBookmarkFlag(doc, userId), "Document retrieved");
+    const payload = withBookmarkFlag(doc, userId);
+    const meta = {
+      ...((payload.metadata as Record<string, unknown> | undefined) ?? {}),
+    };
+    const hasTranscript = Boolean(
+      typeof meta.extractedText === "string" && meta.extractedText.trim()
+    );
+    delete meta.extractedText;
+    payload.metadata = meta;
+    payload.hasTranscript = hasTranscript;
+    payload.contentKind = doc.metadata?.contentKind ?? detectDocumentKind(doc.s3Key);
+
+    sendSuccess(res, payload, "Document retrieved");
   } catch (err) {
     sendError(res, "Failed to retrieve document", 500, (err as Error).message);
   }
@@ -284,11 +297,23 @@ export const completeDocumentUpload = async (req: AuthRequest, res: Response): P
 
     const rawSubject = typeof subject === "string" ? subject.trim() : "";
     const matchedSubject = LAW_SUBJECTS.find((s) => s.toLowerCase() === rawSubject.toLowerCase());
-    // Free-text subjects (e.g. "Tax law") are not in the enum — keep them as description.
-    const metadata =
-      rawSubject && !matchedSubject
-        ? { description: rawSubject, jurisdiction: "Nigeria" }
-        : undefined;
+
+    let contentKind = detectDocumentKind(s3Key);
+    let extractedText = "";
+    try {
+      const extracted = await extractDocumentText({ s3Key });
+      contentKind = extracted.kind;
+      extractedText = extracted.text;
+    } catch {
+      /* keep empty transcript — viewer can still open original */
+    }
+
+    const metadata: Record<string, unknown> = {
+      jurisdiction: "Nigeria",
+      contentKind,
+      ...(extractedText ? { extractedText } : {}),
+      ...(rawSubject && !matchedSubject ? { description: rawSubject } : {}),
+    };
 
     const doc = await LibraryDocument.create({
       title,
@@ -299,7 +324,7 @@ export const completeDocumentUpload = async (req: AuthRequest, res: Response): P
       fileSize: parsedFileSize,
       uploadedBy: req.user!.userId,
       isLibraryContent: false,
-      ...(metadata ? { metadata } : {}),
+      metadata,
     });
 
     sendCreated(res, doc, "Document uploaded successfully");
@@ -353,8 +378,27 @@ export const uploadDocumentDirect = async (req: AuthRequest, res: Response): Pro
     );
 
     const matchedSubject = LAW_SUBJECTS.find((s) => s.toLowerCase() === subject.toLowerCase());
-    const metadata =
-      subject && !matchedSubject ? { description: subject, jurisdiction: "Nigeria" } : undefined;
+
+    let contentKind = detectDocumentKind(s3Key, file.mimetype);
+    let extractedText = "";
+    try {
+      const extracted = await extractDocumentText({
+        s3Key,
+        buffer: file.buffer,
+        mimeHint: file.mimetype,
+      });
+      contentKind = extracted.kind;
+      extractedText = extracted.text;
+    } catch {
+      /* keep empty transcript */
+    }
+
+    const metadata: Record<string, unknown> = {
+      jurisdiction: "Nigeria",
+      contentKind,
+      ...(extractedText ? { extractedText } : {}),
+      ...(subject && !matchedSubject ? { description: subject } : {}),
+    };
 
     const doc = await LibraryDocument.create({
       title,
@@ -365,7 +409,7 @@ export const uploadDocumentDirect = async (req: AuthRequest, res: Response): Pro
       fileSize: file.size,
       uploadedBy: req.user!.userId,
       isLibraryContent: false,
-      ...(metadata ? { metadata } : {}),
+      metadata,
     });
 
     sendCreated(res, doc, "Document uploaded successfully");
@@ -403,9 +447,77 @@ export const getDocumentSignedUrl = async (req: AuthRequest, res: Response): Pro
     }
 
     const signedUrl = await s3Service.getSignedDownloadUrl(doc.s3Key, 3600);
-    sendSuccess(res, { signedUrl, expiresIn: 3600 }, "Signed URL generated");
+    const contentKind = doc.metadata?.contentKind ?? detectDocumentKind(doc.s3Key);
+    sendSuccess(
+      res,
+      { signedUrl, expiresIn: 3600, contentKind, s3Key: doc.s3Key },
+      "Signed URL generated"
+    );
   } catch (err) {
     sendError(res, "Failed to generate access URL", 500, (err as Error).message);
+  }
+};
+
+/**
+ * Readable transcript for Library reader / AI — PDF extraction, HTML/text cleanup.
+ * Lazily extracts and persists for older uploads that lack metadata.extractedText.
+ */
+export const getDocumentText = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const doc = await LibraryDocument.findById(req.params.id);
+    if (!doc) {
+      sendNotFound(res, "Document not found");
+      return;
+    }
+
+    const userId = req.user!.userId;
+    const isOwner = doc.uploadedBy?.toString() === userId;
+    if (!doc.isLibraryContent && !isOwner) {
+      res.status(403).json({ success: false, message: "Access denied" });
+      return;
+    }
+
+    const existing = doc.metadata?.extractedText?.trim();
+    if (existing) {
+      sendSuccess(
+        res,
+        {
+          text: existing,
+          contentKind: doc.metadata?.contentKind ?? detectDocumentKind(doc.s3Key),
+          cached: true,
+        },
+        "Document text retrieved"
+      );
+      return;
+    }
+
+    if (!doc.s3Key) {
+      sendBadRequest(res, "This document has no associated file stored in S3");
+      return;
+    }
+
+    const extracted = await extractDocumentText({ s3Key: doc.s3Key });
+    if (!doc.metadata) {
+      doc.metadata = { jurisdiction: "Nigeria" };
+    }
+    doc.metadata.contentKind = extracted.kind;
+    if (extracted.text) {
+      doc.metadata.extractedText = extracted.text;
+    }
+    doc.markModified("metadata");
+    await doc.save();
+
+    sendSuccess(
+      res,
+      {
+        text: extracted.text,
+        contentKind: extracted.kind,
+        cached: false,
+      },
+      extracted.text ? "Document text extracted" : "No extractable text for this file type"
+    );
+  } catch (err) {
+    sendError(res, "Failed to retrieve document text", 500, (err as Error).message);
   }
 };
 

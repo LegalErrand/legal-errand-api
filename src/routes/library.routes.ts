@@ -11,6 +11,7 @@ import {
   completeBulkDocumentUpload,
   uploadDocumentDirect,
   getDocumentSignedUrl,
+  getDocumentText,
   bookmarkDocument,
   deleteDocument,
 } from "../controllers/library.controller";
@@ -32,6 +33,7 @@ router.post("/upload/complete/bulk", completeBulkDocumentUpload); // Save bulk u
 router.get("/:id", getDocument); // Single document details
 router.patch("/:id", updateDocument); // Update user's own document
 router.get("/:id/access", getDocumentSignedUrl); // Signed download URL
+router.get("/:id/text", getDocumentText); // Extracted transcript (PDF/text/HTML)
 router.post("/:id/bookmark", bookmarkDocument); // Toggle bookmark
 router.delete("/:id", deleteDocument); // Delete user's document
 
