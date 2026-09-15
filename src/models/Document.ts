@@ -17,6 +17,10 @@ export interface IDocumentDocument extends Document {
     citation?: string;
     jurisdiction?: string;
     description?: string;
+    /** Detected source kind for multi-format Library viewer */
+    contentKind?: string;
+    /** Extracted plain text for reading / AI (truncated) */
+    extractedText?: string;
   };
   bookmarks: mongoose.Types.ObjectId[];
 }
@@ -38,6 +42,9 @@ const DocumentSchema = new Schema<IDocumentDocument>(
       citation: String,
       jurisdiction: { type: String, default: "Nigeria" },
       description: String,
+      // Free-form so new source kinds (scrapers, OCR, office) land without schema churn
+      contentKind: { type: String },
+      extractedText: { type: String },
     },
     bookmarks: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
