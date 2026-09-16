@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { Response } from "express";
 import { AuthRequest } from "../types";
 import { Progress, ReasoningScore } from "../models/Progress";
@@ -102,6 +103,8 @@ export const getActivity = async (req: AuthRequest, res: Response): Promise<void
       title: string;
       subtitle: string;
       createdAt: Date;
+      /** Where this entry opens in the app; omitted when it has no detail view. */
+      link?: string;
     };
 
     let items: ActivityItem[] = [];
@@ -110,17 +113,26 @@ export const getActivity = async (req: AuthRequest, res: Response): Promise<void
     if (!type || type === "all" || type === "quizzes") {
       const attempts = await QuestionAttempt.find({ userId })
         .populate<{
-          questionId: { prompt: string; subject: string };
+          questionId: { _id: Types.ObjectId; prompt: string; subject: string };
         }>("questionId", "prompt subject")
         .sort({ createdAt: -1 });
 
-      const quizItems: ActivityItem[] = attempts.map((a) => ({
-        _id: a._id.toString(),
-        type: "quiz",
-        title: (a.questionId as { prompt?: string })?.prompt?.slice(0, 80) ?? "Quiz question",
-        subtitle: `Score: ${a.scores.total}/100 · ${(a.questionId as { subject?: string })?.subject ?? ""}`,
-        createdAt: (a as unknown as { createdAt: Date }).createdAt,
-      }));
+      const quizItems: ActivityItem[] = attempts.map((a) => {
+        // The quiz page loads a Question, not the attempt — link to the question.
+        const question = a.questionId as {
+          _id?: Types.ObjectId;
+          prompt?: string;
+          subject?: string;
+        };
+        return {
+          _id: a._id.toString(),
+          type: "quiz",
+          title: question?.prompt?.slice(0, 80) ?? "Quiz question",
+          subtitle: `Score: ${a.scores.total}/100 · ${question?.subject ?? ""}`,
+          createdAt: (a as unknown as { createdAt: Date }).createdAt,
+          link: question?._id ? `/dashboard/quiz/${question._id.toString()}` : undefined,
+        };
+      });
       items = items.concat(quizItems);
     }
 
@@ -132,6 +144,7 @@ export const getActivity = async (req: AuthRequest, res: Response): Promise<void
         title: c.citation || "Case explanation",
         subtitle: "Case summary",
         createdAt: (c as unknown as { createdAt: Date }).createdAt,
+        link: `/dashboard/cases/${c._id.toString()}`,
       }));
       items = items.concat(caseItems);
     }
@@ -144,6 +157,11 @@ export const getActivity = async (req: AuthRequest, res: Response): Promise<void
         title: c.title,
         subtitle: `${c.messageCount} messages · ${c.mode}`,
         createdAt: (c as unknown as { updatedAt: Date }).updatedAt,
+        // The AI page restores a conversation by sessionId, not the Mongo _id,
+        // and needs the mode so a Socratic session reopens in the right tab.
+        link:
+          `/dashboard/ai?session=${encodeURIComponent(c.sessionId)}` +
+          (c.mode === "socratic" ? "&mode=socratic" : ""),
       }));
       items = items.concat(convoItems);
     }

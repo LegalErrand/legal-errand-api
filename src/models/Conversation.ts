@@ -14,6 +14,9 @@ export interface IConversationDocument extends Document {
   lastMessage: string;
   mode: "standard" | "socratic";
   messages: IConversationMessage[];
+  /** Socratic-only state, kept so a session survives its Redis cache expiring. */
+  topic?: string;
+  hintsUsed?: number;
 }
 
 const ConversationMessageSchema = new Schema<IConversationMessage>(
@@ -34,6 +37,8 @@ const ConversationSchema = new Schema<IConversationDocument>(
     lastMessage: { type: String, default: "" },
     mode: { type: String, enum: ["standard", "socratic"], default: "standard" },
     messages: { type: [ConversationMessageSchema], default: [] },
+    topic: { type: String },
+    hintsUsed: { type: Number, default: 0 },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
