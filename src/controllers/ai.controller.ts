@@ -433,6 +433,9 @@ export const getConversation = async (req: AuthRequest, res: Response): Promise<
         title: convo.title,
         messageCount: convo.messageCount,
         lastMessage: convo.lastMessage,
+        mode: convo.mode,
+        topic: convo.topic,
+        hintsUsed: convo.hintsUsed ?? 0,
         createdAt: (convo as unknown as { createdAt: Date }).createdAt,
         messages: messages.map((m) => ({
           role: m.role,
@@ -718,6 +721,9 @@ export const startSocraticSession = async (req: AuthRequest, res: Response): Pro
       messageCount: 1,
       lastMessage: openingQuestion.slice(0, 120),
       mode: "socratic",
+      topic,
+      hintsUsed: 0,
+      messages: toStoredMessages(session.messages as ConversationMessage[]),
     });
 
     sendSuccess(res, { sessionId, question: openingQuestion }, "Socratic session started");
@@ -740,11 +746,33 @@ export const respondSocratic = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const session = await redisService.get<{
+    let session = await redisService.get<{
       messages: ConversationMessage[];
       hintsUsed: number;
       topic: string;
     }>(`socratic:${sessionId}`);
+
+    // The Redis copy only lives an hour. Rebuild it from the stored transcript
+    // so a session opened from history can still be continued.
+    if (!session) {
+      const stored = await Conversation.findOne({
+        sessionId,
+        userId: req.user!.userId,
+        mode: "socratic",
+      });
+
+      if (stored) {
+        session = {
+          messages: (stored.messages ?? []).map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp,
+          })) as ConversationMessage[],
+          hintsUsed: stored.hintsUsed ?? 0,
+          topic: stored.topic ?? stored.title.replace(/^Socratic:\s*/, ""),
+        };
+      }
+    }
 
     if (!session) {
       sendBadRequest(res, "Session not found or expired");
@@ -771,7 +799,12 @@ export const respondSocratic = async (req: AuthRequest, res: Response): Promise<
 
     await Conversation.findOneAndUpdate(
       { sessionId },
-      { $inc: { messageCount: 1 }, lastMessage: aiResponse.slice(0, 120) }
+      {
+        $inc: { messageCount: 1 },
+        lastMessage: aiResponse.slice(0, 120),
+        hintsUsed: session.hintsUsed,
+        messages: toStoredMessages(session.messages),
+      }
     );
 
     sendSuccess(res, { aiResponse, hintsUsed: session.hintsUsed }, "Socratic response");
