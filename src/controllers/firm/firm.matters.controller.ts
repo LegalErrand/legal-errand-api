@@ -1,8 +1,9 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { FirmAuthRequest } from "../../types/firm";
 import { Matter, FirmTask, FirmDocument } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
 
-export const getMatters = async (req: Request, res: Response): Promise<void> => {
+export const getMatters = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { stage, type, health, lawyer, search } = req.query;
     const filter: Record<string, unknown> = {};
@@ -29,7 +30,7 @@ export const getMatters = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-export const getMatterById = async (req: Request, res: Response): Promise<void> => {
+export const getMatterById = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const matter = await Matter.findById(id);
@@ -47,9 +48,12 @@ export const getMatterById = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-export const createMatter = async (req: Request, res: Response): Promise<void> => {
+export const createMatter = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
-    const { firmId, name, clientId, clientName, type, lawyerName, healthNote } = req.body;
+    const { name, clientId, clientName, type, lawyerName, healthNote } = req.body;
+    // Scope comes from the token, never the body — a caller must not be able to
+    // write into another firm's data.
+    const firmId = req.member?.firmId;
 
     if (!name || !clientName) {
       sendBadRequest(res, "Matter name and client name are required");
@@ -75,7 +79,7 @@ export const createMatter = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const assignWorkToJunior = async (req: Request, res: Response): Promise<void> => {
+export const assignWorkToJunior = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const { juniorId, juniorName, tasks, brief, internalDeadline, supervisionLevel } = req.body;
