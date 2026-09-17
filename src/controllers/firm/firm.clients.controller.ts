@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { FirmAuthRequest } from "../../types/firm";
 import { Client, Matter, FirmDocument } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
 
@@ -123,5 +124,37 @@ export const acceptClientIntake = async (req: Request, res: Response): Promise<v
     sendCreated(res, { client, matter }, "Intake accepted and matter initialized");
   } catch (error) {
     sendBadRequest(res, "Failed to accept intake", error);
+  }
+};
+
+/**
+ * Creates a client directly (as opposed to accepting an intake).
+ *
+ * `firmId` comes from the token so a caller cannot write into another firm.
+ */
+export const createClient = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const firmId = req.member?.firmId;
+    const { name, type, practiceArea, lawyerName, phone } = req.body as Record<string, string>;
+
+    if (!name?.trim()) {
+      sendBadRequest(res, "Client name is required");
+      return;
+    }
+
+    const client = await Client.create({
+      firmId,
+      name: name.trim(),
+      type: type === "Company" ? "Company" : "Individual",
+      practiceArea: practiceArea?.trim() || "General",
+      lawyerName: lawyerName?.trim() || "",
+      phone: phone?.trim() || "",
+      status: "active",
+      lastContactText: "Just now",
+    });
+
+    sendCreated(res, client, "Client created");
+  } catch (error) {
+    sendBadRequest(res, "Failed to create client", error);
   }
 };

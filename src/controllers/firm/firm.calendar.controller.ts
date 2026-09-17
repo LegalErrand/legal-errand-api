@@ -1,8 +1,9 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { FirmAuthRequest } from "../../types/firm";
 import { CalendarEvent } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
 
-export const getCalendarEvents = async (req: Request, res: Response): Promise<void> => {
+export const getCalendarEvents = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { type, month, lawyer } = req.query;
     const filter: Record<string, unknown> = {};
@@ -18,10 +19,10 @@ export const getCalendarEvents = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const createCalendarEvent = async (req: Request, res: Response): Promise<void> => {
+export const createCalendarEvent = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
-    const { firmId, title, date, time, type, matter, lawyer, location, relatedTasks, documents } =
-      req.body;
+    const firmId = req.member?.firmId;
+    const { title, date, time, type, matter, lawyer, location, relatedTasks, documents } = req.body;
 
     if (!title || !date) {
       sendBadRequest(res, "Event title and date are required");
@@ -47,7 +48,7 @@ export const createCalendarEvent = async (req: Request, res: Response): Promise<
   }
 };
 
-export const startHearingPrep = async (req: Request, res: Response): Promise<void> => {
+export const startHearingPrep = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const event = await CalendarEvent.findById(id);

@@ -1,8 +1,9 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { FirmAuthRequest } from "../../types/firm";
 import { FirmMessage } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest } from "../../utils/response";
 
-export const getMessages = async (req: Request, res: Response): Promise<void> => {
+export const getMessages = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
     const { channel, matterId } = req.query;
     const filter: Record<string, unknown> = {};
@@ -17,9 +18,10 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export const sendMessage = async (req: Request, res: Response): Promise<void> => {
+export const sendMessage = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
-    const { firmId, matterId, matterName, recipient, channel, text, sender } = req.body;
+    const { matterId, matterName, recipient, channel, text, sender } = req.body;
+    const firmId = req.member?.firmId;
 
     if (!text || !recipient) {
       sendBadRequest(res, "Recipient and message text are required");

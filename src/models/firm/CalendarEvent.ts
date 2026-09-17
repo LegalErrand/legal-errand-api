@@ -44,7 +44,13 @@ const CalendarEventSchema = new Schema<ICalendarEvent>(
     ],
     documents: { type: [String], default: [] },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // The client reads `id`; without virtuals in toJSON only `_id` is sent,
+    // which breaks every detail link and lookup that keys on id.
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
 export const CalendarEvent = model<ICalendarEvent>("CalendarEvent", CalendarEventSchema);

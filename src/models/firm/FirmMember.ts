@@ -86,7 +86,13 @@ const FirmMemberSchema = new Schema<IFirmMember>(
       active: { type: Boolean, default: false },
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // The client reads `id`; without virtuals in toJSON only `_id` is sent,
+    // which breaks every detail link and lookup that keys on id.
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
 FirmMemberSchema.pre("save", async function () {
@@ -99,8 +105,14 @@ FirmMemberSchema.methods.comparePassword = async function (candidate: string): P
   return bcrypt.compare(candidate, this.password);
 };
 
-/** Never leak the hash, even if a query accidentally selects it. */
+/**
+ * Never leak the hash, even if a query accidentally selects it.
+ *
+ * `virtuals` must be repeated here: this call replaces the `toJSON` set in the
+ * schema options, so omitting it would drop the `id` the client reads.
+ */
 FirmMemberSchema.set("toJSON", {
+  virtuals: true,
   transform: (_doc, ret) => {
     (ret as unknown as Record<string, unknown>)["password"] = undefined;
     return ret;
