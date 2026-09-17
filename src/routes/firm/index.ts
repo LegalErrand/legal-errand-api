@@ -31,6 +31,7 @@ router.get("/dashboard", dashCtrl.getDashboardSummary);
 
 // ─── Clients & Intake ─────────────────────────────────────────────────────────
 router.get("/clients", clientCtrl.getClients);
+router.post("/clients", clientCtrl.createClient);
 router.get("/clients/intake/:id", clientCtrl.getClientIntake);
 router.post("/clients/intake/:id/accept", clientCtrl.acceptClientIntake);
 router.get("/clients/:id", clientCtrl.getClientById);

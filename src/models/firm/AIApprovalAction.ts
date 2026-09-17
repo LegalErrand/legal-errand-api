@@ -40,7 +40,13 @@ const AIApprovalActionSchema = new Schema<IAIApprovalAction>(
     },
     actionPayload: { type: Schema.Types.Mixed },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // The client reads `id`; without virtuals in toJSON only `_id` is sent,
+    // which breaks every detail link and lookup that keys on id.
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
 export const AIApprovalAction = model<IAIApprovalAction>(

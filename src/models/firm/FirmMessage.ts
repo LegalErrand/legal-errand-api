@@ -45,7 +45,13 @@ const FirmMessageSchema = new Schema<IFirmMessage>(
     replyConfidence: { type: Number, default: 90 },
     autoSendEnabled: { type: Boolean, default: false },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    // The client reads `id`; without virtuals in toJSON only `_id` is sent,
+    // which breaks every detail link and lookup that keys on id.
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
 );
 
 export const FirmMessage = model<IFirmMessage>("FirmMessage", FirmMessageSchema);
