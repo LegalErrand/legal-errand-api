@@ -1,8 +1,7 @@
 import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
-import { sendZeptoApiMail, isZeptoApiConfigured } from "./zepto-api.service";
-import { sendZeptoMail } from "./zepto-transport";
-import { isZohoConfigured, sendZohoMail } from "./zoho-transport";
+import { isBrevoConfigured, sendBrevoMail } from "./brevo-api.service";
+import { isSesConfigured, sendSesMail } from "./ses.service";
 
 export type MailOptions = {
   to: string;
@@ -10,59 +9,41 @@ export type MailOptions = {
   html: string;
 };
 
-const isConfigured = (): boolean => isZeptoApiConfigured() || isZohoConfigured();
+const isConfigured = (): boolean => isBrevoConfigured() || isSesConfigured();
 
 /**
- * ZeptoMail API first, then Zoho SMTP, then ZeptoMail SMTP.
+ * Brevo Transactional API first, then AWS SES as fallback.
  */
 export const sendEmail = async (options: MailOptions): Promise<boolean> => {
   if (!isConfigured()) {
-    logger.error("Email delivery skipped — set ZEPTO_* and/or ZOHO_* mail env vars", {
+    logger.error("Email delivery skipped — set BREVO_API_KEY and/or AWS_SES_FROM_EMAIL env vars", {
       to: options.to,
       subject: options.subject,
     });
     return false;
   }
 
-  if (isZeptoApiConfigured()) {
-    const apiOk = await sendZeptoApiMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
-    if (apiOk) {
-      logger.info("Email delivered via ZeptoMail API", {
-        to: options.to,
-        subject: options.subject,
-      });
+  if (isBrevoConfigured()) {
+    const ok = await sendBrevoMail({ ...options, from: env.BREVO_MAIL_FROM! });
+    if (ok) {
+      logger.info("Email delivered via Brevo", { to: options.to, subject: options.subject });
       return true;
     }
-    logger.warn("ZeptoMail API failed — falling back to Zoho SMTP", {
+    logger.warn("Brevo failed — falling back to AWS SES", {
       to: options.to,
       subject: options.subject,
     });
   }
 
-  if (isZohoConfigured()) {
-    const zohoOk = await sendZohoMail({ ...options, from: env.ZOHO_MAIL_FROM! });
-    if (zohoOk) {
-      logger.info("Email delivered via Zoho SMTP", { to: options.to, subject: options.subject });
-      return true;
-    }
-    logger.warn("Zoho SMTP failed — falling back to ZeptoMail SMTP", {
-      to: options.to,
-      subject: options.subject,
-    });
-  }
-
-  if (isZeptoApiConfigured()) {
-    const smtpOk = await sendZeptoMail({ ...options, from: env.ZEPTO_MAIL_FROM! });
-    if (smtpOk) {
-      logger.info("Email delivered via ZeptoMail SMTP", {
-        to: options.to,
-        subject: options.subject,
-      });
+  if (isSesConfigured()) {
+    const ok = await sendSesMail(options);
+    if (ok) {
+      logger.info("Email delivered via AWS SES", { to: options.to, subject: options.subject });
       return true;
     }
   }
 
-  logger.error("Email delivery failed — ZeptoMail API, Zoho SMTP, and ZeptoMail SMTP all failed", {
+  logger.error("Email delivery failed — Brevo and AWS SES both failed", {
     to: options.to,
     subject: options.subject,
   });
