@@ -38,21 +38,12 @@ const envSchema = z.object({
   CLIENT_URL: z.string().default("http://localhost:3000"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
 
-  // ZeptoMail (API + SMTP — shared send token)
-  ZEPTO_SMTP_HOST: z.string().default("smtp.zeptomail.com"),
-  ZEPTO_SMTP_PORT: z.string().default("587"),
-  ZEPTO_SMTP_SECURE: z.enum(["true", "false"]).default("false"),
-  ZEPTO_SMTP_USER: z.string().default("emailapikey"),
-  ZEPTO_SMTP_PASS: z.string().optional(),
-  ZEPTO_MAIL_FROM: z.string().optional(),
+  // Brevo Transactional Email (primary)
+  BREVO_API_KEY: z.string().optional(),
+  BREVO_MAIL_FROM: z.string().optional(),
 
-  // Zoho Mail SMTP (fallback)
-  ZOHO_SMTP_HOST: z.string().default("smtp.zoho.com"),
-  ZOHO_SMTP_PORT: z.string().default("465"),
-  ZOHO_SMTP_SECURE: z.enum(["true", "false"]).default("true"),
-  ZOHO_SMTP_USER: z.string().optional(),
-  ZOHO_SMTP_PASS: z.string().optional(),
-  ZOHO_MAIL_FROM: z.string().optional(),
+  // AWS SES (fallback — reuses existing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION)
+  AWS_SES_FROM_EMAIL: z.string().optional(),
 
   // Google Sign-In (GIS). Optional — /auth/google returns 503 when unset.
   GOOGLE_CLIENT_ID: z.string().optional(),
