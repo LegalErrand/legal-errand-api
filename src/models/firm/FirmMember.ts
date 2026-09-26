@@ -42,6 +42,18 @@ export interface IFirmMember extends Document {
    * a reset ends every other session.
    */
   passwordChangedAt?: Date;
+  /**
+   * Standing at the bar. Drives what may leave the firm with this person's
+   * name on it — signing filings, advising a client, approving AI output —
+   * rather than whether they can sign in at all.
+   */
+  barNumber?: string;
+  barYearOfCall?: number;
+  barJurisdiction?: string;
+  barCertificateUrl?: string;
+  barStatus: "unverified" | "pending" | "verified" | "rejected" | "skipped" | "not_applicable";
+  barSubmittedAt?: Date;
+  barVerifiedAt?: Date;
   /** sha256 of the one-time code emailed after a correct password. */
   loginOtpHash?: string;
   loginOtpExpiresAt?: Date;
@@ -98,6 +110,17 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     passwordResetTokenHash: { type: String, select: false, index: true },
     passwordResetExpiresAt: { type: Date, select: false },
     passwordChangedAt: { type: Date },
+    barNumber: { type: String, trim: true },
+    barYearOfCall: { type: Number },
+    barJurisdiction: { type: String, trim: true },
+    barCertificateUrl: { type: String, trim: true },
+    barStatus: {
+      type: String,
+      enum: ["unverified", "pending", "verified", "rejected", "skipped", "not_applicable"],
+      default: "unverified",
+    },
+    barSubmittedAt: { type: Date },
+    barVerifiedAt: { type: Date },
     loginOtpHash: { type: String, select: false },
     loginOtpExpiresAt: { type: Date, select: false },
     loginOtpAttempts: { type: Number, select: false, default: 0 },

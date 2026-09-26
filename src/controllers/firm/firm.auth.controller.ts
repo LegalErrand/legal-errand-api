@@ -448,14 +448,16 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { firmName, jurisdiction, size, registrationNumber, role, fullName } = req.body as {
-      firmName?: string;
-      jurisdiction?: string;
-      size?: string;
-      registrationNumber?: string;
-      role?: string;
-      fullName?: string;
-    };
+    const { firmName, jurisdiction, size, registrationNumber, role, fullName, address } =
+      req.body as {
+        firmName?: string;
+        jurisdiction?: string;
+        size?: string;
+        registrationNumber?: string;
+        role?: string;
+        fullName?: string;
+        address?: string;
+      };
 
     if (!firmName || !String(firmName).trim()) {
       sendBadRequest(res, "Firm name is required");
@@ -480,6 +482,7 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
       contactEmail: signup.email,
       registrationNumber: registrationNumber ? String(registrationNumber).trim() : undefined,
+      address: address ? String(address).trim() : undefined,
       feeEarnerCapacity: FEE_EARNERS_BY_SIZE[String(size ?? "")] ?? 10,
     });
 
@@ -715,5 +718,112 @@ export const resendLoginOtp = async (req: Request, res: Response): Promise<void>
     sendSuccess(res, { retryAfterSeconds: 60 }, "Verification code sent");
   } catch (error) {
     sendServerError(res, "Could not resend the code", error);
+  }
+};
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Bar verification
+ *
+ * This is about what may leave the firm with someone's name on it — signing a
+ * filing, advising a client, approving what the AI drafted — and never about
+ * whether they can sign in. An unverified lawyer still gets in and can still
+ * set the firm up; the gate sits in front of the outputs, not the door.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const NON_LAWYER_ROLES = ["paralegal", "admin"];
+
+/** POST /firm/auth/bar — submit details, skip for now, or say you are not a lawyer. */
+export const submitBarVerification = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.member) {
+      sendUnauthorized(res, "Not signed in to a firm");
+      return;
+    }
+
+    const { action, barNumber, yearOfCall, jurisdiction, certificateUrl } = req.body as {
+      action?: "submit" | "skip" | "not_a_lawyer";
+      barNumber?: string;
+      yearOfCall?: number | string;
+      jurisdiction?: string;
+      certificateUrl?: string;
+    };
+
+    const member = await FirmMember.findById(req.member.memberId);
+    if (!member) {
+      sendNotFound(res, "Member not found");
+      return;
+    }
+
+    if (action === "skip") {
+      member.barStatus = "skipped";
+      await member.save();
+      sendSuccess(res, { barStatus: member.barStatus }, "You can finish this from Settings later");
+      return;
+    }
+
+    if (action === "not_a_lawyer") {
+      member.barStatus = "not_applicable";
+      await member.save();
+      sendSuccess(res, { barStatus: member.barStatus }, "Noted — we will not ask again");
+      return;
+    }
+
+    if (!barNumber || !String(barNumber).trim()) {
+      sendBadRequest(res, "Enter your bar number");
+      return;
+    }
+
+    const year = Number(yearOfCall);
+    const thisYear = new Date().getFullYear();
+    if (!Number.isInteger(year) || year < 1900 || year > thisYear) {
+      sendBadRequest(res, `Enter a year of call between 1900 and ${thisYear}`);
+      return;
+    }
+
+    member.barNumber = String(barNumber).trim();
+    member.barYearOfCall = year;
+    member.barJurisdiction = jurisdiction ? String(jurisdiction).trim() : undefined;
+    // The certificate is optional: a number and a year are enough to start the
+    // check, and chasing a photograph here loses people mid-signup.
+    member.barCertificateUrl = certificateUrl ? String(certificateUrl).trim() : undefined;
+    // "pending", not "verified" — nothing here proves anything on its own. The
+    // check against the bar body happens out of band.
+    member.barStatus = "pending";
+    member.barSubmittedAt = new Date();
+    await member.save();
+
+    sendSuccess(res, { barStatus: member.barStatus }, "Submitted for verification");
+  } catch (error) {
+    sendServerError(res, "Could not submit your bar details", error);
+  }
+};
+
+/** GET /firm/auth/bar — where the check has got to, and whether it is even asked. */
+export const getBarVerification = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.member) {
+      sendUnauthorized(res, "Not signed in to a firm");
+      return;
+    }
+    const member = await FirmMember.findById(req.member.memberId);
+    if (!member) {
+      sendNotFound(res, "Member not found");
+      return;
+    }
+    sendSuccess(
+      res,
+      {
+        barStatus: member.barStatus,
+        barNumber: member.barNumber ?? null,
+        barYearOfCall: member.barYearOfCall ?? null,
+        barJurisdiction: member.barJurisdiction ?? null,
+        submittedAt: member.barSubmittedAt ?? null,
+        // Paralegals and admin staff are never asked for this.
+        required: !NON_LAWYER_ROLES.includes(member.role),
+      },
+      "Bar verification status"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not read your bar status", error);
   }
 };

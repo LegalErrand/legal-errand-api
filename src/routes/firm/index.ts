@@ -51,6 +51,12 @@ router.get("/auth/me", authCtrl.getCurrentMember);
 
 router.post("/invitations", inviteCtrl.sendInvitations);
 
+// Bar verification gates what leaves the firm with a lawyer's name on it,
+// not whether they can sign in, so it needs a real session rather than one of
+// the sign-up tokens.
+router.get("/auth/bar", authCtrl.getBarVerification);
+router.post("/auth/bar", authCtrl.submitBarVerification);
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 router.get("/dashboard", dashCtrl.getDashboardSummary);
 
