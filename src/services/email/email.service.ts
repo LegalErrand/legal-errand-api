@@ -62,6 +62,63 @@ export const emailService = {
     }
     return ok;
   },
+
+  /** The one-time code a firm member needs after their password is accepted. */
+  async sendFirmLoginOtp(email: string, otp: string): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: "Your LegalErrand sign-in code",
+      html:
+        otpEmailHtml(
+          "Sign-in code",
+          "Someone signed in to your LegalErrand firm workspace with your password. Enter this code to finish:",
+          otp
+        ) +
+        `<p style="color: #555; line-height: 1.5; font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 0 20px 20px;">
+          This code expires in 10 minutes. If this was not you, change your password — someone else knows it.
+        </p>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm login OTP sent to ${email}`);
+    } else {
+      logger.error(
+        `[EMAIL] FAILED to send firm login OTP to ${email} — check mail provider config`
+      );
+    }
+    return ok;
+  },
+
+  /** Single-use password reset link for the firm workspace. */
+  async sendFirmPasswordResetLink(email: string, link: string): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: "Reset your LegalErrand password",
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Reset your password</h2>
+          <p style="color: #555; line-height: 1.5;">
+            Someone asked to reset the password on your LegalErrand firm workspace. Use the button
+            below within the hour. It can only be used once.
+          </p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${escapeHtml(link)}" style="background-color: #D97706; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; display: inline-block; font-weight: 600;">
+              Set a new password
+            </a>
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            If you did not ask for this, you can ignore this email — your password stays as it is.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm password reset link sent to ${email}`);
+    } else {
+      logger.error(
+        `[EMAIL] FAILED to send firm password reset link to ${email} — check mail provider config`
+      );
+    }
+    return ok;
+  },
 };
 
 export async function sendWaitlistConfirmationEmail(

@@ -32,6 +32,21 @@ export interface IFirmMember extends Document {
   /** Selected only when explicitly requested — never returned by default. */
   password?: string;
   lastLogin?: Date;
+  /** Set once the member has proved they control the address. */
+  emailVerifiedAt?: Date;
+  /** sha256 of the single-use reset token. Cleared the moment it is spent. */
+  passwordResetTokenHash?: string;
+  passwordResetExpiresAt?: Date;
+  /**
+   * When the password last changed. Tokens issued before this are rejected, so
+   * a reset ends every other session.
+   */
+  passwordChangedAt?: Date;
+  /** sha256 of the one-time code emailed after a correct password. */
+  loginOtpHash?: string;
+  loginOtpExpiresAt?: Date;
+  loginOtpAttempts?: number;
+  loginOtpSentAt?: Date;
   comparePassword(candidate: string): Promise<boolean>;
   coverProxy?: {
     coveringMemberId?: Types.ObjectId;
@@ -79,6 +94,14 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     isActive: { type: Boolean, default: true },
     password: { type: String, select: false, minlength: 8 },
     lastLogin: { type: Date },
+    emailVerifiedAt: { type: Date },
+    passwordResetTokenHash: { type: String, select: false, index: true },
+    passwordResetExpiresAt: { type: Date, select: false },
+    passwordChangedAt: { type: Date },
+    loginOtpHash: { type: String, select: false },
+    loginOtpExpiresAt: { type: Date, select: false },
+    loginOtpAttempts: { type: Number, select: false, default: 0 },
+    loginOtpSentAt: { type: Date, select: false },
     coverProxy: {
       coveringMemberId: { type: Schema.Types.ObjectId, ref: "FirmMember" },
       startDate: { type: Date },

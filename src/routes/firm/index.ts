@@ -19,8 +19,24 @@ import { authIpRateLimit } from "../../middleware/rateLimit.middleware";
 const router = Router();
 
 // ─── Auth & Onboarding (public) ───────────────────────────────────────────────
+// Kept for existing callers; the screens use the three-step sign-up below.
 router.post("/auth/onboarding", authIpRateLimit, authCtrl.onboardFirm);
+
+// Sign up: email + password, six-digit code, then the firm's details.
+router.post("/auth/signup", authIpRateLimit, authCtrl.startFirmSignup);
+router.post("/auth/signup/resend", authIpRateLimit, authCtrl.resendSignupCode);
+router.post("/auth/signup/verify", authIpRateLimit, authCtrl.verifySignupEmail);
+router.post("/auth/signup/firm", authIpRateLimit, authCtrl.completeFirmSetup);
+
+// Log in: password, then a one-time code. /auth/login no longer returns a
+// session token on its own — /auth/login/verify does.
 router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);
+router.post("/auth/login/verify", authIpRateLimit, authCtrl.verifyLoginOtp);
+router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
+
+// Password recovery.
+router.post("/auth/forgot-password", authIpRateLimit, authCtrl.requestPasswordReset);
+router.post("/auth/reset-password", authIpRateLimit, authCtrl.resetPassword);
 
 // Everything below requires a valid firm token.
 router.use(authenticateFirm);
