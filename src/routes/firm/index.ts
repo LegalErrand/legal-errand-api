@@ -14,12 +14,13 @@ import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import { authenticateFirm } from "../../middleware/firmAuth.middleware";
+import { authIpRateLimit } from "../../middleware/rateLimit.middleware";
 
 const router = Router();
 
 // ─── Auth & Onboarding (public) ───────────────────────────────────────────────
-router.post("/auth/onboarding", authCtrl.onboardFirm);
-router.post("/auth/login", authCtrl.loginFirmMember);
+router.post("/auth/onboarding", authIpRateLimit, authCtrl.onboardFirm);
+router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);
 
 // Everything below requires a valid firm token.
 router.use(authenticateFirm);
