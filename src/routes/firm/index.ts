@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as authCtrl from "../../controllers/firm/firm.auth.controller";
+import * as inviteCtrl from "../../controllers/firm/firm.invitations.controller";
 import * as dashCtrl from "../../controllers/firm/firm.dashboard.controller";
 import * as clientCtrl from "../../controllers/firm/firm.clients.controller";
 import * as matterCtrl from "../../controllers/firm/firm.matters.controller";
@@ -38,10 +39,17 @@ router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
 router.post("/auth/forgot-password", authIpRateLimit, authCtrl.requestPasswordReset);
 router.post("/auth/reset-password", authIpRateLimit, authCtrl.resetPassword);
 
+// Invitations: looking one up and accepting it are public — the person
+// holding the link has no account yet.
+router.get("/invitations/:token", authIpRateLimit, inviteCtrl.getInvitation);
+router.post("/invitations/:token/accept", authIpRateLimit, inviteCtrl.acceptInvitation);
+
 // Everything below requires a valid firm token.
 router.use(authenticateFirm);
 
 router.get("/auth/me", authCtrl.getCurrentMember);
+
+router.post("/invitations", inviteCtrl.sendInvitations);
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 router.get("/dashboard", dashCtrl.getDashboardSummary);
