@@ -54,6 +54,13 @@ export interface IFirmMember extends Document {
   barStatus: "unverified" | "pending" | "verified" | "rejected" | "skipped" | "not_applicable";
   barSubmittedAt?: Date;
   barVerifiedAt?: Date;
+  /** Consecutive wrong passwords. Cleared by a correct one. */
+  failedLoginAttempts: number;
+  /** Set once the attempts run out; login refuses until it passes. */
+  lockedUntil?: Date;
+  /** sha256 of the passwordless sign-in link, when one has been requested. */
+  magicLinkTokenHash?: string;
+  magicLinkExpiresAt?: Date;
   /** sha256 of the one-time code emailed after a correct password. */
   loginOtpHash?: string;
   loginOtpExpiresAt?: Date;
@@ -121,6 +128,10 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     },
     barSubmittedAt: { type: Date },
     barVerifiedAt: { type: Date },
+    failedLoginAttempts: { type: Number, default: 0, select: false },
+    lockedUntil: { type: Date, select: false },
+    magicLinkTokenHash: { type: String, select: false, index: true },
+    magicLinkExpiresAt: { type: Date, select: false },
     loginOtpHash: { type: String, select: false },
     loginOtpExpiresAt: { type: Date, select: false },
     loginOtpAttempts: { type: Number, select: false, default: 0 },

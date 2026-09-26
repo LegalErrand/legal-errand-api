@@ -88,6 +88,38 @@ export const emailService = {
     return ok;
   },
 
+  /** Passwordless sign-in link. */
+  async sendFirmMagicLink(email: string, link: string): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: "Your LegalErrand sign-in link",
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Sign in to LegalErrand</h2>
+          <p style="color: #555; line-height: 1.5;">
+            Use the button below to sign in without a password. It works once and expires in
+            fifteen minutes.
+          </p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${escapeHtml(link)}" style="background-color: #D97706; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; display: inline-block; font-weight: 600;">
+              Sign in
+            </a>
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            If you did not ask for this, ignore this email — nobody can sign in without the link.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm magic link sent to ${email}`);
+    } else {
+      logger.error(
+        `[EMAIL] FAILED to send firm magic link to ${email} — check mail provider config`
+      );
+    }
+    return ok;
+  },
+
   /** Invitation to join a firm, at a role the inviter chose. */
   async sendFirmInvitation(
     email: string,
