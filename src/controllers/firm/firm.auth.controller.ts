@@ -901,15 +901,14 @@ export const requestMagicLink = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const member = await FirmMember.findOne({ email: email.toLowerCase().trim() }).select(
-      "+lockedUntil"
-    );
+    const member = await FirmMember.findOne({ email: email.toLowerCase().trim() });
 
-    // A locked account does not get a link either: it would be a way round the
-    // lockout, which is the one thing the lockout exists to prevent.
-    const locked = member?.lockedUntil && member.lockedUntil.getTime() > Date.now();
-
-    if (member && member.isActive && !locked) {
+    // A locked account still gets a link, and the locked screen offers one as
+    // the way out. The lockout stops password guessing; it cannot sensibly stop
+    // someone who controls the inbox, who can already reset the password by the
+    // same route. Blocking one and not the other adds nothing and only strands
+    // the person whose account it actually is.
+    if (member && member.isActive) {
       const token = crypto.randomBytes(32).toString("hex");
       await FirmMember.updateOne(
         { _id: member._id },
