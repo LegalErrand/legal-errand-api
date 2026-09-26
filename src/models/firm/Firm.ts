@@ -4,6 +4,8 @@ export interface IFirm extends Document {
   name: string;
   jurisdiction: string;
   courtFilingPortalId?: string;
+  /** CAC/company registration number, so invoices carry the registered name. */
+  registrationNumber?: string;
   contactEmail: string;
   address?: string;
   subscriptionPlan: "starter" | "professional" | "enterprise";
@@ -28,6 +30,7 @@ const FirmSchema = new Schema<IFirm>(
     name: { type: String, required: true, trim: true },
     jurisdiction: { type: String, required: true, default: "Nigeria (Lagos State High Court)" },
     courtFilingPortalId: { type: String, trim: true },
+    registrationNumber: { type: String, trim: true },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     address: { type: String, trim: true },
     subscriptionPlan: {

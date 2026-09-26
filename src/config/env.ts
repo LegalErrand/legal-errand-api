@@ -36,6 +36,8 @@ const envSchema = z.object({
 
   // App
   CLIENT_URL: z.string().default("http://localhost:3000"),
+  // Firm workspace front end — used for password reset links.
+  FIRM_APP_URL: z.string().default("http://localhost:3002"),
   BCRYPT_SALT_ROUNDS: z.string().default("12"),
 
   // Brevo Transactional Email (primary)
