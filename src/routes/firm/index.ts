@@ -39,6 +39,11 @@ router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
 router.post("/auth/forgot-password", authIpRateLimit, authCtrl.requestPasswordReset);
 router.post("/auth/reset-password", authIpRateLimit, authCtrl.resetPassword);
 
+// Passwordless sign-in. Holding the emailed link proves the inbox, which is
+// what the one-time code proves, so it stands in for the password and the code.
+router.post("/auth/magic-link", authIpRateLimit, authCtrl.requestMagicLink);
+router.post("/auth/magic-link/verify", authIpRateLimit, authCtrl.verifyMagicLink);
+
 // Invitations: looking one up and accepting it are public — the person
 // holding the link has no account yet.
 router.get("/invitations/:token", authIpRateLimit, inviteCtrl.getInvitation);
@@ -50,6 +55,12 @@ router.use(authenticateFirm);
 router.get("/auth/me", authCtrl.getCurrentMember);
 
 router.post("/invitations", inviteCtrl.sendInvitations);
+
+// Bar verification gates what leaves the firm with a lawyer's name on it,
+// not whether they can sign in, so it needs a real session rather than one of
+// the sign-up tokens.
+router.get("/auth/bar", authCtrl.getBarVerification);
+router.post("/auth/bar", authCtrl.submitBarVerification);
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 router.get("/dashboard", dashCtrl.getDashboardSummary);

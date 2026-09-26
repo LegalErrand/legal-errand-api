@@ -22,6 +22,21 @@ function signFirmToken(memberId: string, firmId: string, email: string, role: st
   });
 }
 
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * 423 with the moment the lock lifts.
+ *
+ * sendError carries no data field, and the screen needs the time to count
+ * down to, so this writes the body directly rather than widening the shared
+ * helper for one caller.
+ */
+function sendLocked(res: Response, message: string, lockedUntil: Date): Response {
+  return res.status(423).json({ success: false, message, data: { lockedUntil } });
+}
+
 /** Default fee-earner capacity per firm-size band offered on the details step. */
 const FEE_EARNERS_BY_SIZE: Record<string, number> = {
   "Sole practitioner": 1,
@@ -123,10 +138,42 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    const member = await FirmMember.findOne({ email: email.toLowerCase() }).select("+password");
+    const member = await FirmMember.findOne({ email: email.toLowerCase() }).select(
+      "+password +failedLoginAttempts +lockedUntil"
+    );
+
+    // A locked account is told so, and told when it lifts. Hiding the lock
+    // behind "incorrect password" just makes someone try the same password
+    // fifteen more times and extend their own lockout.
+    if (member?.lockedUntil && member.lockedUntil.getTime() > Date.now()) {
+      sendLocked(
+        res,
+        "Too many attempts. This account is locked for a short while.",
+        member.lockedUntil
+      );
+      return;
+    }
 
     // Same message for unknown email and wrong password — do not reveal which.
     if (!member || !(await member.comparePassword(password))) {
+      if (member) {
+        const attempts = (member.failedLoginAttempts ?? 0) + 1;
+        const update: Record<string, unknown> = { failedLoginAttempts: attempts };
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+          update.lockedUntil = new Date(Date.now() + LOCKOUT_MS);
+          update.failedLoginAttempts = 0;
+        }
+        await FirmMember.updateOne({ _id: member._id }, { $set: update });
+
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+          sendLocked(
+            res,
+            "Too many attempts. This account is locked for a short while.",
+            update.lockedUntil as Date
+          );
+          return;
+        }
+      }
       sendUnauthorized(res, "Incorrect email or password");
       return;
     }
@@ -134,6 +181,14 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
     if (!member.isActive) {
       sendUnauthorized(res, "This account is no longer active");
       return;
+    }
+
+    // The password was right, so the run of failures is over.
+    if (member.failedLoginAttempts || member.lockedUntil) {
+      await FirmMember.updateOne(
+        { _id: member._id },
+        { $set: { failedLoginAttempts: 0 }, $unset: { lockedUntil: "" } }
+      );
     }
 
     const firm = await Firm.findById(member.firmId);
@@ -448,14 +503,16 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const { firmName, jurisdiction, size, registrationNumber, role, fullName } = req.body as {
-      firmName?: string;
-      jurisdiction?: string;
-      size?: string;
-      registrationNumber?: string;
-      role?: string;
-      fullName?: string;
-    };
+    const { firmName, jurisdiction, size, registrationNumber, role, fullName, address } =
+      req.body as {
+        firmName?: string;
+        jurisdiction?: string;
+        size?: string;
+        registrationNumber?: string;
+        role?: string;
+        fullName?: string;
+        address?: string;
+      };
 
     if (!firmName || !String(firmName).trim()) {
       sendBadRequest(res, "Firm name is required");
@@ -480,6 +537,7 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
       contactEmail: signup.email,
       registrationNumber: registrationNumber ? String(registrationNumber).trim() : undefined,
+      address: address ? String(address).trim() : undefined,
       feeEarnerCapacity: FEE_EARNERS_BY_SIZE[String(size ?? "")] ?? 10,
     });
 
@@ -715,5 +773,207 @@ export const resendLoginOtp = async (req: Request, res: Response): Promise<void>
     sendSuccess(res, { retryAfterSeconds: 60 }, "Verification code sent");
   } catch (error) {
     sendServerError(res, "Could not resend the code", error);
+  }
+};
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Bar verification
+ *
+ * This is about what may leave the firm with someone's name on it — signing a
+ * filing, advising a client, approving what the AI drafted — and never about
+ * whether they can sign in. An unverified lawyer still gets in and can still
+ * set the firm up; the gate sits in front of the outputs, not the door.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const NON_LAWYER_ROLES = ["paralegal", "admin"];
+
+/** POST /firm/auth/bar — submit details, skip for now, or say you are not a lawyer. */
+export const submitBarVerification = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.member) {
+      sendUnauthorized(res, "Not signed in to a firm");
+      return;
+    }
+
+    const { action, barNumber, yearOfCall, jurisdiction, certificateUrl } = req.body as {
+      action?: "submit" | "skip" | "not_a_lawyer";
+      barNumber?: string;
+      yearOfCall?: number | string;
+      jurisdiction?: string;
+      certificateUrl?: string;
+    };
+
+    const member = await FirmMember.findById(req.member.memberId);
+    if (!member) {
+      sendNotFound(res, "Member not found");
+      return;
+    }
+
+    if (action === "skip") {
+      member.barStatus = "skipped";
+      await member.save();
+      sendSuccess(res, { barStatus: member.barStatus }, "You can finish this from Settings later");
+      return;
+    }
+
+    if (action === "not_a_lawyer") {
+      member.barStatus = "not_applicable";
+      await member.save();
+      sendSuccess(res, { barStatus: member.barStatus }, "Noted — we will not ask again");
+      return;
+    }
+
+    if (!barNumber || !String(barNumber).trim()) {
+      sendBadRequest(res, "Enter your bar number");
+      return;
+    }
+
+    const year = Number(yearOfCall);
+    const thisYear = new Date().getFullYear();
+    if (!Number.isInteger(year) || year < 1900 || year > thisYear) {
+      sendBadRequest(res, `Enter a year of call between 1900 and ${thisYear}`);
+      return;
+    }
+
+    member.barNumber = String(barNumber).trim();
+    member.barYearOfCall = year;
+    member.barJurisdiction = jurisdiction ? String(jurisdiction).trim() : undefined;
+    // The certificate is optional: a number and a year are enough to start the
+    // check, and chasing a photograph here loses people mid-signup.
+    member.barCertificateUrl = certificateUrl ? String(certificateUrl).trim() : undefined;
+    // "pending", not "verified" — nothing here proves anything on its own. The
+    // check against the bar body happens out of band.
+    member.barStatus = "pending";
+    member.barSubmittedAt = new Date();
+    await member.save();
+
+    sendSuccess(res, { barStatus: member.barStatus }, "Submitted for verification");
+  } catch (error) {
+    sendServerError(res, "Could not submit your bar details", error);
+  }
+};
+
+/** GET /firm/auth/bar — where the check has got to, and whether it is even asked. */
+export const getBarVerification = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.member) {
+      sendUnauthorized(res, "Not signed in to a firm");
+      return;
+    }
+    const member = await FirmMember.findById(req.member.memberId);
+    if (!member) {
+      sendNotFound(res, "Member not found");
+      return;
+    }
+    sendSuccess(
+      res,
+      {
+        barStatus: member.barStatus,
+        barNumber: member.barNumber ?? null,
+        barYearOfCall: member.barYearOfCall ?? null,
+        barJurisdiction: member.barJurisdiction ?? null,
+        submittedAt: member.barSubmittedAt ?? null,
+        // Paralegals and admin staff are never asked for this.
+        required: !NON_LAWYER_ROLES.includes(member.role),
+      },
+      "Bar verification status"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not read your bar status", error);
+  }
+};
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Passwordless sign-in
+ *
+ * A link emailed to the address on the account. Holding it proves the inbox,
+ * which is the same thing the one-time code proves, so it stands in for both
+ * the password and the code rather than being a shortcut past them.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** POST /firm/auth/magic-link — always answers the same way. */
+export const requestMagicLink = async (req: Request, res: Response): Promise<void> => {
+  const generic = "If an account exists for that address, a sign-in link is on its way";
+  try {
+    const { email } = req.body as { email?: string };
+    if (!email || !isEmail(email)) {
+      sendBadRequest(res, "Enter a valid email address");
+      return;
+    }
+
+    const member = await FirmMember.findOne({ email: email.toLowerCase().trim() }).select(
+      "+lockedUntil"
+    );
+
+    // A locked account does not get a link either: it would be a way round the
+    // lockout, which is the one thing the lockout exists to prevent.
+    const locked = member?.lockedUntil && member.lockedUntil.getTime() > Date.now();
+
+    if (member && member.isActive && !locked) {
+      const token = crypto.randomBytes(32).toString("hex");
+      await FirmMember.updateOne(
+        { _id: member._id },
+        {
+          $set: {
+            magicLinkTokenHash: sha256(token),
+            magicLinkExpiresAt: new Date(Date.now() + MAGIC_LINK_TTL_MS),
+          },
+        }
+      );
+      const link = `${env.FIRM_APP_URL.replace(/\/$/, "")}/magic-link?token=${token}`;
+      await emailService.sendFirmMagicLink(member.email, link);
+    }
+
+    sendSuccess(res, {}, generic);
+  } catch (error) {
+    sendServerError(res, "Could not send a sign-in link", error);
+  }
+};
+
+/** POST /firm/auth/magic-link/verify — spend the link, hand back a session. */
+export const verifyMagicLink = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.body as { token?: string };
+    if (!token) {
+      sendBadRequest(res, "This sign-in link is no longer valid");
+      return;
+    }
+
+    const member = await FirmMember.findOne({
+      magicLinkTokenHash: sha256(String(token)),
+      magicLinkExpiresAt: { $gt: new Date() },
+    }).select("+magicLinkTokenHash +magicLinkExpiresAt");
+
+    if (!member || !member.isActive) {
+      sendBadRequest(res, "This sign-in link has expired or has already been used");
+      return;
+    }
+
+    const firm = await Firm.findById(member.firmId);
+    if (!firm) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
+    // Single use, and it clears any lockout: whoever holds the link controls
+    // the inbox, which is stronger evidence than the password that failed.
+    await FirmMember.updateOne(
+      { _id: member._id },
+      {
+        $set: { lastLogin: new Date(), failedLoginAttempts: 0 },
+        $unset: { magicLinkTokenHash: "", magicLinkExpiresAt: "", lockedUntil: "" },
+      }
+    );
+
+    const authToken = signFirmToken(
+      member._id.toString(),
+      member.firmId.toString(),
+      member.email,
+      member.role
+    );
+
+    sendSuccess(res, { token: authToken, member: member.toJSON(), firm }, "Logged in");
+  } catch (error) {
+    sendServerError(res, "Could not sign you in with that link", error);
   }
 };
