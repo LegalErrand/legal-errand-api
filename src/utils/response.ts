@@ -77,3 +77,20 @@ export const sendBadRequest = (
   error?: string | unknown,
   logContext?: Record<string, unknown>
 ): Response => sendError(res, message, 400, error, logContext);
+
+export const sendConflict = (
+  res: Response,
+  message: string,
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 409, undefined, logContext);
+
+/**
+ * For unexpected faults. Unlike sendBadRequest this logs at error level, so a
+ * failing dependency surfaces instead of being buried as a warning.
+ */
+export const sendServerError = (
+  res: Response,
+  message: string,
+  error?: string | unknown,
+  logContext?: Record<string, unknown>
+): Response => sendError(res, message, 500, error, logContext);

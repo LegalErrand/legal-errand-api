@@ -7,7 +7,9 @@ import {
   sendSuccess,
   sendCreated,
   sendBadRequest,
+  sendConflict,
   sendNotFound,
+  sendServerError,
   sendUnauthorized,
 } from "../../utils/response";
 
@@ -40,41 +42,52 @@ export const onboardFirm = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    let firm = await Firm.findOne({ contactEmail: contactEmail.toLowerCase() });
-    if (!firm) {
-      firm = await Firm.create({
-        name: firmName,
-        jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
-        contactEmail: contactEmail.toLowerCase(),
-        address: address || "",
-        aiAutonomy: {
-          intakeExtraction: aiPreferences?.includes("intake") ? "auto" : "review",
-          documentDrafting: aiPreferences?.includes("draft") ? "partner" : "review",
-          clientMessaging: "review",
-          billingInvoicing: aiPreferences?.includes("billing") ? "partner" : "review",
-        },
-      });
+    const normalisedContact = contactEmail.toLowerCase();
+    const adminEmailNormalised = (adminEmail || contactEmail).toLowerCase();
+
+    // Onboarding creates a brand new firm and never authenticates into an
+    // existing one. Reusing a firm here would let anyone who knows its contact
+    // address mint a managing-partner token for it. Joining an existing firm
+    // goes through the invite flow instead.
+    const existingFirm = await Firm.findOne({ contactEmail: normalisedContact });
+    if (existingFirm) {
+      sendConflict(res, "A firm is already registered with that contact email");
+      return;
     }
 
-    // Create managing partner member if not existing
-    const email = adminEmail || contactEmail;
-    let member = await FirmMember.findOne({ firmId: firm._id, email: email.toLowerCase() });
-    if (!member) {
-      member = await FirmMember.create({
-        firmId: firm._id,
-        name: adminName || "Managing Partner",
-        email: email.toLowerCase(),
-        initials: (adminName || "MP")
-          .split(" ")
-          .map((n: string) => n[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 2),
-        role: "managing_partner",
-        supervision: "standard",
-        password: adminPassword,
-      });
+    const existingMember = await FirmMember.findOne({ email: adminEmailNormalised });
+    if (existingMember) {
+      sendConflict(res, "An account already exists for that email address");
+      return;
     }
+
+    const firm = await Firm.create({
+      name: firmName,
+      jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
+      contactEmail: normalisedContact,
+      address: address || "",
+      aiAutonomy: {
+        intakeExtraction: aiPreferences?.includes("intake") ? "auto" : "review",
+        documentDrafting: aiPreferences?.includes("draft") ? "partner" : "review",
+        clientMessaging: "review",
+        billingInvoicing: aiPreferences?.includes("billing") ? "partner" : "review",
+      },
+    });
+
+    const member = await FirmMember.create({
+      firmId: firm._id,
+      name: adminName || "Managing Partner",
+      email: adminEmailNormalised,
+      initials: (adminName || "MP")
+        .split(" ")
+        .map((n: string) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2),
+      role: "managing_partner",
+      supervision: "standard",
+      password: adminPassword,
+    });
 
     const token = signFirmToken(
       member._id.toString(),
@@ -85,7 +98,7 @@ export const onboardFirm = async (req: Request, res: Response): Promise<void> =>
 
     sendCreated(res, { firm, member, token }, "Firm onboarded successfully");
   } catch (error) {
-    sendBadRequest(res, "Failed to complete firm onboarding", error);
+    sendServerError(res, "Failed to complete firm onboarding", error);
   }
 };
 
@@ -111,10 +124,17 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    const firm = await Firm.findById(member.firmId);
+    if (!firm) {
+      // The member outlived its firm; issuing a firm-scoped token here would
+      // produce a session pointing at nothing.
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
     member.lastLogin = new Date();
     await member.save();
 
-    const firm = await Firm.findById(member.firmId);
     const token = signFirmToken(
       member._id.toString(),
       member.firmId.toString(),
@@ -124,7 +144,7 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
 
     sendSuccess(res, { token, member: member.toJSON(), firm }, "Logged in");
   } catch (error) {
-    sendBadRequest(res, "Login failed", error);
+    sendServerError(res, "Login failed", error);
   }
 };
 
@@ -142,9 +162,16 @@ export const getCurrentMember = async (req: FirmAuthRequest, res: Response): Pro
       return;
     }
 
+    // Tokens live for 7 days, so a member deactivated mid-session would keep
+    // full access without this check.
+    if (!member.isActive) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
     const firm = await Firm.findById(member.firmId);
     sendSuccess(res, { member, firm }, "Current member retrieved");
   } catch (error) {
-    sendBadRequest(res, "Failed to retrieve current member", error);
+    sendServerError(res, "Failed to retrieve current member", error);
   }
 };
