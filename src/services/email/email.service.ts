@@ -88,6 +88,43 @@ export const emailService = {
     return ok;
   },
 
+  /** Invitation to join a firm, at a role the inviter chose. */
+  async sendFirmInvitation(
+    email: string,
+    o: { firmName: string; inviterName: string; role: string; link: string }
+  ): Promise<boolean> {
+    const role = escapeHtml(o.role.replace(/_/g, " "));
+    const ok = await sendEmail({
+      to: email,
+      subject: `${o.inviterName} invited you to join ${o.firmName} on LegalErrand`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">${escapeHtml(o.inviterName)} invited you to join ${escapeHtml(o.firmName)}</h2>
+          <p style="color: #555; line-height: 1.5;">
+            You have been invited as a <b>${role}</b>. Accept below to set your password and
+            open your first matter.
+          </p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${escapeHtml(o.link)}" style="background-color: #D97706; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; display: inline-block; font-weight: 600;">
+              Accept the invitation
+            </a>
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            This invitation lasts seven days and can only be used once. If you were not expecting
+            it, you can ignore this email.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm invitation sent to ${email}`);
+    } else {
+      logger.error(
+        `[EMAIL] FAILED to send firm invitation to ${email} — check mail provider config`
+      );
+    }
+    return ok;
+  },
+
   /** Single-use password reset link for the firm workspace. */
   async sendFirmPasswordResetLink(email: string, link: string): Promise<boolean> {
     const ok = await sendEmail({
