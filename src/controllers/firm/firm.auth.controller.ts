@@ -14,6 +14,7 @@ import {
   sendNotFound,
   sendServerError,
   sendUnauthorized,
+  sendForbidden,
 } from "../../utils/response";
 
 function signFirmToken(memberId: string, firmId: string, email: string, role: string) {
@@ -131,16 +132,24 @@ export const onboardFirm = async (req: Request, res: Response): Promise<void> =>
 
 export const loginFirmMember = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body as { email?: string; password?: string };
+    const { email, password, deviceToken } = req.body as {
+      email?: string;
+      password?: string;
+      deviceToken?: string;
+    };
 
     if (!email || !password) {
       sendBadRequest(res, "Email and password are required");
       return;
     }
 
-    const member = await FirmMember.findOne({ email: email.toLowerCase() }).select(
-      "+password +failedLoginAttempts +lockedUntil"
+    // A lawyer may sit at more than one firm, so this is every membership on
+    // the address. The first is what the lockout counter and the emailed code
+    // hang off; the rest come along once the code is right.
+    const candidates = await FirmMember.find({ email: email.toLowerCase() }).select(
+      "+password +failedLoginAttempts +lockedUntil +trustedDevices"
     );
+    const member = candidates[0];
 
     // A locked account is told so, and told when it lifts. Hiding the lock
     // behind "incorrect password" just makes someone try the same password
@@ -154,8 +163,15 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // Each membership carries its own password hash, so the ones this password
+    // opens are the ones this person may enter.
+    const opened = [];
+    for (const c of candidates) {
+      if (await c.comparePassword(password)) opened.push(c);
+    }
+
     // Same message for unknown email and wrong password — do not reveal which.
-    if (!member || !(await member.comparePassword(password))) {
+    if (!member || opened.length === 0) {
       if (member) {
         const attempts = (member.failedLoginAttempts ?? 0) + 1;
         const update: Record<string, unknown> = { failedLoginAttempts: attempts };
@@ -202,6 +218,39 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
     // Correct credentials are only half of a login. The session token is issued
     // by /auth/login/verify once the emailed code comes back, so a stolen
     // password on its own does not reach the firm's matters.
+    const memberIds = opened.map((m) => m._id.toString());
+
+    // A browser the member has already trusted skips the code — and only the
+    // code. The password was still required to get this far.
+    if (deviceToken) {
+      const hash = sha256(deviceToken);
+      const now = Date.now();
+      const trusted = opened.some((m) =>
+        (m.trustedDevices ?? []).some((d) => d.tokenHash === hash && d.expiresAt.getTime() > now)
+      );
+      if (trusted) {
+        if (memberIds.length === 1) {
+          const session = await issueSessionFor(memberIds[0]);
+          if (!session) {
+            sendUnauthorized(res, "This account is no longer active");
+            return;
+          }
+          sendSuccess(res, session, "Logged in");
+          return;
+        }
+        sendSuccess(
+          res,
+          {
+            needsFirmChoice: true,
+            choiceToken: signFirmChoiceToken(memberIds, member.email),
+            firms: await describeMemberships(memberIds),
+          },
+          "Choose a firm"
+        );
+        return;
+      }
+    }
+
     const code = generateCode();
     await FirmMember.updateOne(
       { _id: member._id },
@@ -219,8 +268,11 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
     sendSuccess(
       res,
       {
-        challengeToken: signLoginChallengeToken(member._id.toString(), member.email),
+        challengeToken: signLoginChallengeToken(memberIds, member._id.toString(), member.email),
         email: maskEmail(member.email),
+        // Lets the screen frame itself as confirming an unrecognised sign-in
+        // rather than as a routine second step.
+        newDevice: true,
       },
       "Enter the code we emailed you"
     );
@@ -303,30 +355,78 @@ function readOnboardingToken(req: Request): { signupId: string; email: string } 
   }
 }
 
+const DEVICE_TRUST_MS = 30 * 24 * 60 * 60 * 1000;
+
 /**
  * Proves a password was accepted, and nothing more. Not scope "firm", so
  * authenticateFirm rejects it and it cannot reach firm data on its own.
+ *
+ * It carries every membership that password opened — a lawyer can sit at more
+ * than one firm — plus which of them the emailed code was written to.
  */
-function signLoginChallengeToken(memberId: string, email: string): string {
-  return jwt.sign({ memberId, email, scope: "firm-login-otp" }, env.JWT_SECRET, {
+function signLoginChallengeToken(memberIds: string[], otpMemberId: string, email: string): string {
+  return jwt.sign({ memberIds, otpMemberId, email, scope: "firm-login-otp" }, env.JWT_SECRET, {
     expiresIn: "10m",
   });
 }
 
-function readLoginChallengeToken(req: Request): { memberId: string; email: string } | null {
+/** Issued once the code is right, to carry the choice of firm and nothing else. */
+function signFirmChoiceToken(memberIds: string[], email: string): string {
+  return jwt.sign({ memberIds, email, scope: "firm-login-choice" }, env.JWT_SECRET, {
+    expiresIn: "10m",
+  });
+}
+
+function readScopedToken(
+  req: Request,
+  scope: "firm-login-otp" | "firm-login-choice"
+): { memberIds: string[]; otpMemberId?: string; email: string } | null {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
   try {
     const decoded = jwt.verify(header.split(" ")[1], env.JWT_SECRET) as {
-      memberId?: string;
+      memberIds?: string[];
+      otpMemberId?: string;
       email?: string;
       scope?: string;
     };
-    if (decoded.scope !== "firm-login-otp" || !decoded.memberId || !decoded.email) return null;
-    return { memberId: decoded.memberId, email: decoded.email };
+    if (decoded.scope !== scope || !decoded.memberIds?.length || !decoded.email) return null;
+    return { memberIds: decoded.memberIds, otpMemberId: decoded.otpMemberId, email: decoded.email };
   } catch {
     return null;
   }
+}
+
+/** The firms a set of memberships belongs to, for the "choose a firm" screen. */
+async function describeMemberships(memberIds: string[]) {
+  const members = await FirmMember.find({ _id: { $in: memberIds } }).select("firmId role name");
+  const firms = await Firm.find({ _id: { $in: members.map((m) => m.firmId) } }).select("name");
+  const byId = new Map(firms.map((f) => [f._id.toString(), f.name]));
+  return members.map((m) => ({
+    memberId: m._id.toString(),
+    firmId: m.firmId.toString(),
+    firmName: byId.get(m.firmId.toString()) ?? "A firm",
+    role: m.role,
+  }));
+}
+
+/** Issues the session for one chosen membership. */
+async function issueSessionFor(memberId: string) {
+  const member = await FirmMember.findById(memberId);
+  if (!member || !member.isActive) return null;
+  const firm = await Firm.findById(member.firmId);
+  if (!firm) return null;
+  await FirmMember.updateOne({ _id: member._id }, { $set: { lastLogin: new Date() } });
+  return {
+    token: signFirmToken(
+      member._id.toString(),
+      member.firmId.toString(),
+      member.email,
+      member.role
+    ),
+    member: member.toJSON(),
+    firm,
+  };
 }
 
 /** "a****a@firm.com" — enough to recognise the inbox, not enough to harvest it. */
@@ -660,19 +760,19 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 /** POST /firm/auth/login/verify — exchange the emailed code for a session. */
 export const verifyLoginOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const claims = readLoginChallengeToken(req);
-    if (!claims) {
+    const claims = readScopedToken(req, "firm-login-otp");
+    if (!claims?.otpMemberId) {
       sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
       return;
     }
 
-    const { code } = req.body as { code?: string };
+    const { code, trustDevice } = req.body as { code?: string; trustDevice?: boolean };
     if (!code) {
       sendBadRequest(res, "Enter the six-digit code");
       return;
     }
 
-    const member = await FirmMember.findById(claims.memberId).select(
+    const member = await FirmMember.findById(claims.otpMemberId).select(
       "+loginOtpHash +loginOtpExpiresAt +loginOtpAttempts"
     );
     if (!member || !member.isActive) {
@@ -698,17 +798,10 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const firm = await Firm.findById(member.firmId);
-    if (!firm) {
-      sendUnauthorized(res, "This account is no longer active");
-      return;
-    }
-
     // Single use: the code dies with the session it produced.
     await FirmMember.updateOne(
       { _id: member._id },
       {
-        $set: { lastLogin: new Date() },
         $unset: {
           loginOtpHash: "",
           loginOtpExpiresAt: "",
@@ -718,14 +811,47 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       }
     );
 
-    const token = signFirmToken(
-      member._id.toString(),
-      member.firmId.toString(),
-      member.email,
-      member.role
-    );
+    // "Trust this device" is recorded against every membership the password
+    // opened, so a second firm on the same browser is not asked again.
+    let issuedDeviceToken: string | undefined;
+    if (trustDevice) {
+      issuedDeviceToken = crypto.randomBytes(32).toString("hex");
+      await FirmMember.updateMany(
+        { _id: { $in: claims.memberIds } },
+        {
+          $push: {
+            trustedDevices: {
+              tokenHash: sha256(issuedDeviceToken),
+              expiresAt: new Date(Date.now() + DEVICE_TRUST_MS),
+              createdAt: new Date(),
+            },
+          },
+        }
+      );
+    }
 
-    sendSuccess(res, { token, member: member.toJSON(), firm }, "Logged in");
+    // More than one firm answered to that password, so the person picks.
+    if (claims.memberIds.length > 1) {
+      sendSuccess(
+        res,
+        {
+          needsFirmChoice: true,
+          choiceToken: signFirmChoiceToken(claims.memberIds, member.email),
+          firms: await describeMemberships(claims.memberIds),
+          deviceToken: issuedDeviceToken,
+        },
+        "Choose a firm"
+      );
+      return;
+    }
+
+    const session = await issueSessionFor(claims.memberIds[0]);
+    if (!session) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
+    sendSuccess(res, { ...session, deviceToken: issuedDeviceToken }, "Logged in");
   } catch (error) {
     sendServerError(res, "Could not verify the code", error);
   }
@@ -734,13 +860,13 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
 /** POST /firm/auth/login/resend — a fresh login code, behind the same cooldown. */
 export const resendLoginOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const claims = readLoginChallengeToken(req);
-    if (!claims) {
+    const claims = readScopedToken(req, "firm-login-otp");
+    if (!claims?.otpMemberId) {
       sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
       return;
     }
 
-    const member = await FirmMember.findById(claims.memberId).select("+loginOtpSentAt");
+    const member = await FirmMember.findById(claims.otpMemberId).select("+loginOtpSentAt");
     if (!member || !member.isActive) {
       sendUnauthorized(res, "This account is no longer active");
       return;
@@ -974,5 +1100,39 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
     sendSuccess(res, { token: authToken, member: member.toJSON(), firm }, "Logged in");
   } catch (error) {
     sendServerError(res, "Could not sign you in with that link", error);
+  }
+};
+
+/**
+ * POST /firm/auth/login/firm — pick which firm to enter.
+ *
+ * Only reachable with a choice token, which is only issued once the password
+ * and the code have both been accepted. The chosen membership has to be one of
+ * the set that token was minted for, so this cannot be used to enter a firm the
+ * password never opened.
+ */
+export const chooseLoginFirm = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const claims = readScopedToken(req, "firm-login-choice");
+    if (!claims) {
+      sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
+      return;
+    }
+
+    const { memberId } = req.body as { memberId?: string };
+    if (!memberId || !claims.memberIds.includes(String(memberId))) {
+      sendForbidden(res, "That is not one of the firms you can enter");
+      return;
+    }
+
+    const session = await issueSessionFor(String(memberId));
+    if (!session) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
+    sendSuccess(res, session, "Logged in");
+  } catch (error) {
+    sendServerError(res, "Could not open that firm", error);
   }
 };

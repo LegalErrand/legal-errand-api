@@ -61,6 +61,12 @@ export interface IFirmMember extends Document {
   /** sha256 of the passwordless sign-in link, when one has been requested. */
   magicLinkTokenHash?: string;
   magicLinkExpiresAt?: Date;
+  /**
+   * Browsers this member has chosen to trust. While one is presented and
+   * unexpired the one-time code is skipped, which is the only thing "trust
+   * this device" buys — it never skips the password.
+   */
+  trustedDevices?: Array<{ tokenHash: string; label?: string; expiresAt: Date; createdAt: Date }>;
   /** sha256 of the one-time code emailed after a correct password. */
   loginOtpHash?: string;
   loginOtpExpiresAt?: Date;
@@ -132,6 +138,19 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     lockedUntil: { type: Date, select: false },
     magicLinkTokenHash: { type: String, select: false, index: true },
     magicLinkExpiresAt: { type: Date, select: false },
+    trustedDevices: {
+      type: [
+        {
+          _id: false,
+          tokenHash: { type: String, required: true },
+          label: { type: String },
+          expiresAt: { type: Date, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      select: false,
+    },
     loginOtpHash: { type: String, select: false },
     loginOtpExpiresAt: { type: Date, select: false },
     loginOtpAttempts: { type: Number, select: false, default: 0 },

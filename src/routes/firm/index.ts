@@ -34,6 +34,7 @@ router.post("/auth/signup/firm", authIpRateLimit, authCtrl.completeFirmSetup);
 router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);
 router.post("/auth/login/verify", authIpRateLimit, authCtrl.verifyLoginOtp);
 router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
+router.post("/auth/login/firm", authIpRateLimit, authCtrl.chooseLoginFirm);
 
 // Password recovery.
 router.post("/auth/forgot-password", authIpRateLimit, authCtrl.requestPasswordReset);

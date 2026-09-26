@@ -120,8 +120,8 @@ export const sendInvitations = async (req: FirmAuthRequest, res: Response): Prom
         });
         continue;
       }
-      if (await FirmMember.findOne({ email })) {
-        results.push({ email, status: "rejected", reason: "Already has an account" });
+      if (await FirmMember.findOne({ email, firmId: firm._id })) {
+        results.push({ email, status: "rejected", reason: "Already at this firm" });
         continue;
       }
 
@@ -241,8 +241,11 @@ export const acceptInvitation = async (req: Request, res: Response): Promise<voi
       sendNotFound(res, "That firm no longer exists");
       return;
     }
-    if (await FirmMember.findOne({ email: invitation.email })) {
-      sendConflict(res, "An account already exists for that email address");
+    // A lawyer can belong to more than one firm — counsel who sits with two
+    // chambers, or a consultant. What must not happen twice is a membership of
+    // the *same* firm, so the check is scoped to it.
+    if (await FirmMember.findOne({ email: invitation.email, firmId: firm._id })) {
+      sendConflict(res, "You already have an account at this firm");
       return;
     }
 
