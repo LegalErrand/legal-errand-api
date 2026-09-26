@@ -120,6 +120,40 @@ export const emailService = {
     return ok;
   },
 
+  /** Someone on the firm's own domain asking to be let in. */
+  async sendFirmJoinRequest(
+    email: string,
+    o: { firmName: string; requesterEmail: string; note?: string }
+  ): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: `${o.requesterEmail} asked to join ${o.firmName}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Someone asked to join ${escapeHtml(o.firmName)}</h2>
+          <p style="color: #555; line-height: 1.5;">
+            <b>${escapeHtml(o.requesterEmail)}</b> signed up on your firm's domain and asked to be
+            let in rather than starting a second firm.
+          </p>
+          ${
+            o.note
+              ? `<p style="color:#555;line-height:1.5;border-left:3px solid #D97706;padding-left:12px;margin:18px 0;">${escapeHtml(o.note)}</p>`
+              : ""
+          }
+          <p style="color: #555; line-height: 1.5;">
+            Approve it from Team settings, where you also set their role. Until someone does,
+            they have no access to anything.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm join request sent to ${email}`);
+    } else {
+      logger.error(`[EMAIL] FAILED to send firm join request to ${email}`);
+    }
+    return ok;
+  },
+
   /** Invitation to join a firm, at a role the inviter chose. */
   async sendFirmInvitation(
     email: string,

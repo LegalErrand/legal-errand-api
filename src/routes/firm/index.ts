@@ -29,6 +29,10 @@ router.post("/auth/signup/resend", authIpRateLimit, authCtrl.resendSignupCode);
 router.post("/auth/signup/verify", authIpRateLimit, authCtrl.verifySignupEmail);
 router.post("/auth/signup/firm", authIpRateLimit, authCtrl.completeFirmSetup);
 
+// Spotting a colleague's firm before a second one is created on the same domain.
+router.get("/auth/firm-by-domain", authIpRateLimit, authCtrl.findFirmByDomain);
+router.post("/auth/join-request", authIpRateLimit, authCtrl.requestToJoinFirm);
+
 // Log in: password, then a one-time code. /auth/login no longer returns a
 // session token on its own — /auth/login/verify does.
 router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);

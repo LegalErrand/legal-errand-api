@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Firm, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
+import { Firm, FirmJoinRequest, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
 import { emailService } from "../../services/email/email.service";
 import { env } from "../../config/env";
 import { FirmAuthRequest } from "../../types/firm";
@@ -636,6 +636,7 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       name: String(firmName).trim(),
       jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
       contactEmail: signup.email,
+      domain: signup.email.split("@")[1],
       registrationNumber: registrationNumber ? String(registrationNumber).trim() : undefined,
       address: address ? String(address).trim() : undefined,
       feeEarnerCapacity: FEE_EARNERS_BY_SIZE[String(size ?? "")] ?? 10,
@@ -1134,5 +1135,124 @@ export const chooseLoginFirm = async (req: Request, res: Response): Promise<void
     sendSuccess(res, session, "Logged in");
   } catch (error) {
     sendServerError(res, "Could not open that firm", error);
+  }
+};
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Joining a firm that already exists
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * GET /firm/auth/firm-by-domain?email= — is a colleague's firm already here?
+ *
+ * Public, and it does say that a firm exists on a domain. That is a deliberate
+ * trade: without it, the second person at a firm silently creates a duplicate
+ * and the practice ends up split across two accounts that cannot see each
+ * other's matters. It returns only the firm's name and how many people are in
+ * it — nothing that is not already obvious to anyone who works there.
+ */
+export const findFirmByDomain = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const email = String(req.query.email ?? "");
+    if (!isEmail(email)) {
+      sendSuccess(res, { firm: null }, "No firm on that domain");
+      return;
+    }
+
+    const domain = email.toLowerCase().trim().split("@")[1];
+    // Free mailboxes are not firms; matching on them would offer to put every
+    // gmail signup into whichever firm registered on gmail first.
+    const PUBLIC_DOMAINS = [
+      "gmail.com",
+      "yahoo.com",
+      "hotmail.com",
+      "outlook.com",
+      "icloud.com",
+      "proton.me",
+      "protonmail.com",
+      "live.com",
+      "aol.com",
+    ];
+    if (!domain || PUBLIC_DOMAINS.includes(domain)) {
+      sendSuccess(res, { firm: null }, "No firm on that domain");
+      return;
+    }
+
+    const firm = await Firm.findOne({ domain }).select("name");
+    if (!firm) {
+      sendSuccess(res, { firm: null }, "No firm on that domain");
+      return;
+    }
+
+    const memberCount = await FirmMember.countDocuments({ firmId: firm._id, isActive: true });
+    sendSuccess(
+      res,
+      { firm: { id: firm._id.toString(), name: firm.name, domain, memberCount } },
+      "Firm found"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not check that domain", error);
+  }
+};
+
+/** POST /firm/auth/join-request — ask a firm's partners to let you in. */
+export const requestToJoinFirm = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, note } = req.body as { email?: string; note?: string };
+    if (!email || !isEmail(email)) {
+      sendBadRequest(res, "Enter a valid work email address");
+      return;
+    }
+
+    const normalised = email.toLowerCase().trim();
+    const domain = normalised.split("@")[1];
+    const firm = await Firm.findOne({ domain });
+    if (!firm) {
+      sendNotFound(res, "No firm is registered on that domain");
+      return;
+    }
+
+    if (await FirmMember.findOne({ email: normalised, firmId: firm._id })) {
+      sendConflict(res, "You already have an account at that firm");
+      return;
+    }
+
+    // Asking again refreshes the note rather than stacking a second row on the
+    // approver's queue.
+    await FirmJoinRequest.findOneAndUpdate(
+      { firmId: firm._id, email: normalised, status: "pending" },
+      {
+        firmId: firm._id,
+        email: normalised,
+        note: note ? String(note).trim().slice(0, 500) : undefined,
+        status: "pending",
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Whoever can issue an invitation can approve one of these.
+    const approvers = await FirmMember.find({
+      firmId: firm._id,
+      isActive: true,
+      role: { $in: ["managing_partner", "partner", "admin"] },
+    }).select("email");
+
+    await Promise.all(
+      approvers.map((a) =>
+        emailService.sendFirmJoinRequest(a.email, {
+          firmName: firm.name,
+          requesterEmail: normalised,
+          note: note ? String(note).trim() : undefined,
+        })
+      )
+    );
+
+    sendCreated(
+      res,
+      { firmName: firm.name, approvers: approvers.length },
+      "Your request has been sent"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not send the request", error);
   }
 };

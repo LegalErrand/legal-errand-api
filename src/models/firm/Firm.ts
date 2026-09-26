@@ -7,6 +7,8 @@ export interface IFirm extends Document {
   /** CAC/company registration number, so invoices carry the registered name. */
   registrationNumber?: string;
   contactEmail: string;
+  /** Email domain the firm was created on, used to spot colleagues signing up. */
+  domain?: string;
   address?: string;
   subscriptionPlan: "starter" | "professional" | "enterprise";
   feeEarnerCapacity: number;
@@ -32,6 +34,7 @@ const FirmSchema = new Schema<IFirm>(
     courtFilingPortalId: { type: String, trim: true },
     registrationNumber: { type: String, trim: true },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
+    domain: { type: String, lowercase: true, trim: true, index: true },
     address: { type: String, trim: true },
     subscriptionPlan: {
       type: String,
