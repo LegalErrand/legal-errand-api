@@ -8,6 +8,19 @@ export interface IFirm extends Document {
   registrationNumber?: string;
   contactEmail: string;
   address?: string;
+  /**
+   * Where the firm is, structured. `jurisdiction` says which court they file in,
+   * which is a different question and a free-text one — it cannot be filtered or
+   * grouped, and the firm admin needs to do both.
+   */
+  country: string;
+  /** State, province, nation or region — whatever that country calls its own. */
+  state?: string;
+  /**
+   * @deprecated Superseded by the firm's Subscription, which carries the real
+   * plan and its price. Kept in step by legacyPlanFor() because
+   * legalerrand-firm-app still reads it; remove once that app moves across.
+   */
   subscriptionPlan: "starter" | "professional" | "enterprise";
   feeEarnerCapacity: number;
   aiAutonomy: {
@@ -33,6 +46,8 @@ const FirmSchema = new Schema<IFirm>(
     registrationNumber: { type: String, trim: true },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     address: { type: String, trim: true },
+    country: { type: String, trim: true, default: "Nigeria", index: true },
+    state: { type: String, trim: true, index: true },
     subscriptionPlan: {
       type: String,
       enum: ["starter", "professional", "enterprise"],

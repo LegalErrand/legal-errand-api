@@ -798,4 +798,90 @@ export const adminPaths: Record<string, unknown> = {
       responses: { "200": { description: "Paginated research sessions." } },
     },
   },
+
+  // ─── Firm admin ─────────────────────────────────────────────────────────────
+  // The law firms who pay for LegalErrand, as opposed to the consumer routes
+  // above, which are about people using the Academy app. Reading needs
+  // super_admin, firm_admin or support_admin; changing a firm needs the first
+  // two.
+
+  "/admin/firms": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "List firms",
+      description:
+        "Every firm with its plan, commercial status, seats, MRR and a computed health score. Filter by `status`, `plan`, `country`, `state` and `q` (name or contact email); sort by `sort` (name, plan, mrr, seats, createdAt) and `dir` (asc, desc).",
+      parameters: [
+        { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+        { name: "limit", in: "query", schema: { type: "integer", default: 50, maximum: 200 } },
+        {
+          name: "status",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: ["trialing", "active", "past_due", "churned", "suspended"],
+          },
+        },
+        {
+          name: "plan",
+          in: "query",
+          schema: { type: "string", enum: ["starter", "practice", "firm", "enterprise"] },
+        },
+        { name: "country", in: "query", schema: { type: "string" } },
+        { name: "state", in: "query", schema: { type: "string" } },
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "sort", in: "query", schema: { type: "string", default: "mrr" } },
+        { name: "dir", in: "query", schema: { type: "string", enum: ["asc", "desc"] } },
+      ],
+      responses: {
+        "200": { description: "Paginated firms." },
+        "403": { description: "Role may not open the firm admin." },
+      },
+    },
+  },
+
+  "/admin/firms/metrics": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Commercial metrics",
+      description:
+        "MRR, ARR, average per paying firm, churn rate, seats sold against seats used, revenue at risk from failed payments, trials running and trials ending within three days, plus a breakdown by plan.",
+      responses: { "200": { description: "Metrics object." } },
+    },
+  },
+
+  "/admin/firms/plans": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Plan catalogue",
+      description:
+        "The plans a firm can be on, with their naira price and included seats. Enterprise has no list price — it is negotiated and the agreed figure lives on the firm's subscription.",
+      responses: { "200": { description: "Plans." } },
+    },
+  },
+
+  "/admin/firms/{id}": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "One firm",
+      description:
+        "Everything in the list row, plus address, registration number, AI autonomy settings and subscription dates. The health score comes with the four parts it is made of, so it is never unexplained.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "200": { description: "Firm." },
+        "404": { description: "No such firm." },
+      },
+    },
+  },
+
+  "/admin/firms/{id}/people": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "People at a firm",
+      description:
+        "Members with their role, whether they have taken up their seat, when they last signed in, and their standing at the bar. Metadata only — no client or matter content.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "200": { description: "Members." } },
+    },
+  },
 };
