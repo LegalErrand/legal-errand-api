@@ -884,4 +884,293 @@ export const adminPaths: Record<string, unknown> = {
       responses: { "200": { description: "Members." } },
     },
   },
+
+  // ─── Firm admin: money ──────────────────────────────────────────────────────
+
+  "/admin/firms/revenue": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Revenue",
+      description:
+        "Current MRR, ARR and average per paying firm, twelve months of **invoiced and collected** amounts, what moved this month, a breakdown by plan, and the money at risk behind failed invoices. `mrrHistoryRetained` is false: MRR is not snapshotted, so the series is collections — money that actually arrived — rather than a reconstruction of what MRR used to be.",
+      responses: { "200": { description: "Revenue." } },
+    },
+  },
+
+  "/admin/firms/{id}/invoices": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "A firm's invoices",
+      description:
+        "Up to two years of invoices, newest first, each with how many attempts it took to collect and why the last attempt failed if it did.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "200": { description: "Invoices." } },
+    },
+  },
+
+  "/admin/firms/{id}/plan": {
+    patch: {
+      tags: ["Firm admin"],
+      summary: "Change a firm's plan",
+      description:
+        "Seats and price follow the catalogue, except on Enterprise, which has no list price — `mrr` is required there, or the firm would silently drop to zero. A firm is never left with fewer seats than people already using it. Writes an audit row.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["plan"],
+              properties: {
+                plan: { type: "string", enum: ["starter", "practice", "firm", "enterprise"] },
+                mrr: { type: "integer", description: "Naira per month. Required for enterprise." },
+                seats: { type: "integer" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": { description: "Changed." },
+        "400": { description: "Unknown plan, or Enterprise without an agreed price." },
+        "403": { description: "Support may read the firm admin but not change a firm." },
+        "409": { description: "The firm has no subscription yet." },
+      },
+    },
+  },
+
+  "/admin/firms/{id}/status": {
+    patch: {
+      tags: ["Firm admin"],
+      summary: "Suspend or reactivate a firm",
+      description:
+        "Suspending stops the firm's people signing in; reactivating puts them back. Writes an audit row either way.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["action"],
+              properties: {
+                action: { type: "string", enum: ["suspend", "reactivate"] },
+                reason: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      responses: { "200": { description: "Changed." }, "403": { description: "Not permitted." } },
+    },
+  },
+
+  "/admin/firms/{id}/trial/extend": {
+    post: {
+      tags: ["Firm admin"],
+      summary: "Extend a trial by seven days",
+      description:
+        "Extends from today when the trial has already lapsed, and from its end date when it has not — so a week always means a week from now. Writes an audit row.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "200": { description: "Extended." },
+        "409": { description: "The firm is not on a trial." },
+      },
+    },
+  },
+
+  "/admin/firms/{id}/payment/retry": {
+    post: {
+      tags: ["Firm admin"],
+      summary: "Retry a failed payment",
+      description:
+        "**Records the attempt; collects nothing.** No payment provider is connected to this API, so the attempt is written as pending and the subscription is left where it is. Returns 202 and says so. Writes an audit row.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        "202": { description: "Attempt recorded, nothing collected." },
+        "409": { description: "No failed invoice to retry." },
+      },
+    },
+  },
+
+  "/admin/firms/{id}/access-request": {
+    post: {
+      tags: ["Firm admin"],
+      summary: "Ask a firm for access to its workspace",
+      description:
+        "**Records the request; grants nothing.** The owner is not notified and no access is given — that flow does not exist yet. What this does give you is an auditable record of who asked for access to whom, and why. Returns 202.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "202": { description: "Request recorded." } },
+    },
+  },
+
+  // ─── Firm admin: what people did ────────────────────────────────────────────
+
+  "/admin/firms/{id}/activity": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "A firm's activity",
+      description:
+        "Who did what and when. **Metadata only** — matters and documents appear as reference numbers, and nothing a client said or a document contained is here. That is a promise to every firm, not an omission. Filter by `type`, `memberId` and `days`.",
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        { name: "days", in: "query", schema: { type: "integer", default: 30, maximum: 365 } },
+        { name: "type", in: "query", schema: { type: "string" } },
+        { name: "memberId", in: "query", schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Paginated activity." } },
+    },
+  },
+
+  "/admin/firms/activity": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Activity across every firm",
+      description:
+        "The same metadata-only view, across the platform, filtered by `type`, `country`, `state` and `days`. The meta block carries the last 24 hours: actions, firms active, and failed sign-ins — the last being how an attack on a firm's accounts first shows up.",
+      parameters: [
+        { name: "days", in: "query", schema: { type: "integer", default: 30, maximum: 365 } },
+        { name: "type", in: "query", schema: { type: "string" } },
+        { name: "country", in: "query", schema: { type: "string" } },
+        { name: "state", in: "query", schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Paginated activity." } },
+    },
+  },
+
+  "/admin/firms/{id}/usage": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "What one firm uses",
+      description:
+        "Matters, documents, tasks, time entries and clients, plus activity by kind over the window. `aiCost` is null: nothing meters AI use against a provider yet, so it is absent rather than estimated.",
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        { name: "days", in: "query", schema: { type: "integer", default: 30, maximum: 365 } },
+      ],
+      responses: { "200": { description: "Usage." } },
+    },
+  },
+
+  "/admin/firms/usage": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Load across the platform",
+      description:
+        "People and actions per day, actions by kind, and feature adoption as the share of firms that have done each kind of thing at all — not the share of actions, which one busy firm could carry on its own.",
+      parameters: [
+        { name: "days", in: "query", schema: { type: "integer", default: 30, maximum: 365 } },
+      ],
+      responses: { "200": { description: "Usage." } },
+    },
+  },
+
+  "/admin/firms/geography": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Where the firms are",
+      description:
+        "Firms, paying firms, MRR and people by country. Pass `country` to break that one country down by state or province; without it only the country totals come back, since every division of every country would be most of a gazetteer.",
+      parameters: [{ name: "country", in: "query", schema: { type: "string" } }],
+      responses: { "200": { description: "Geography." } },
+    },
+  },
+
+  "/admin/firms/people": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Everyone at every firm",
+      description:
+        "Members across the platform with their firm and location, filtered by `role`, `country`, `state` and a name or email search. The meta block counts seats paid for but never taken up.",
+      parameters: [
+        { name: "role", in: "query", schema: { type: "string" } },
+        { name: "country", in: "query", schema: { type: "string" } },
+        { name: "state", in: "query", schema: { type: "string" } },
+        { name: "q", in: "query", schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Paginated people." } },
+    },
+  },
+
+  // ─── Firm admin: support, notes and the record ──────────────────────────────
+
+  "/admin/firms/tickets": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Support tickets",
+      description:
+        "`view` is open, resolved or all. `satisfaction` is null because nothing collects it yet.",
+      parameters: [
+        {
+          name: "view",
+          in: "query",
+          schema: { type: "string", enum: ["open", "resolved", "all"] },
+        },
+        { name: "firmId", in: "query", schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Tickets." } },
+    },
+  },
+
+  "/admin/firms/tickets/{ticketId}": {
+    patch: {
+      tags: ["Firm admin"],
+      summary: "Mark a ticket resolved",
+      description: "Writes an audit row naming the ticket and the firm.",
+      parameters: [{ name: "ticketId", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "200": { description: "Resolved." }, "404": { description: "No such ticket." } },
+    },
+  },
+
+  "/admin/firms/{id}/notes": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Private notes about a firm",
+      description:
+        "What the team knows that the numbers do not say. Visible to LegalErrand admins only — a firm never sees these.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { "200": { description: "Notes." } },
+    },
+    post: {
+      tags: ["Firm admin"],
+      summary: "Add a note",
+      description: "Up to 4000 characters. Writes an audit row; the note's text stays in the note.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["body"],
+              properties: { body: { type: "string" } },
+            },
+          },
+        },
+      },
+      responses: { "201": { description: "Saved." }, "400": { description: "Empty or too long." } },
+    },
+  },
+
+  "/admin/firms/audit": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "What admins and the system did",
+      description:
+        "Append-only. There is no endpoint that edits or deletes a row and there must never be one — the value of this log is that nobody can tidy it up afterwards. If a row is wrong, the fix is another row saying so. Filter by `firmId`.",
+      parameters: [{ name: "firmId", in: "query", schema: { type: "string" } }],
+      responses: { "200": { description: "Paginated audit rows." } },
+    },
+  },
+
+  "/admin/firms/system": {
+    get: {
+      tags: ["Firm admin"],
+      summary: "Platform health",
+      description:
+        "**Not instrumented.** Nothing in this API measures uptime, latency or error rates — there is no monitor and no metrics store. Rather than return invented figures that would look exactly like real ones, this returns `instrumented: false` and empty arrays, and the dashboard shows the screen as not instrumented.",
+      responses: { "200": { description: "A stated absence of measurement." } },
+    },
+  },
 };
