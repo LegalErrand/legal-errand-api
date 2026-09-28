@@ -2,7 +2,12 @@ import mongoose, { Schema, Document } from "mongoose";
 import bcrypt from "bcryptjs";
 import { env } from "../config/env";
 
-export const ADMIN_ROLES = ["super_admin", "content_admin", "support_admin"] as const;
+/**
+ * firm_admin looks after the law firms who pay for LegalErrand: their plans,
+ * their money and, when it comes to it, turning one off. Widening the list is
+ * additive, so every existing admin keeps the role they already had.
+ */
+export const ADMIN_ROLES = ["super_admin", "content_admin", "support_admin", "firm_admin"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
 export interface IAdminDocument extends Document {
