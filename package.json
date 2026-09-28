@@ -17,7 +17,8 @@
     "sync:prod-to-dev": "ts-node --transpile-only src/scripts/syncProdContentToDev.ts",
     "seed:questions": "ts-node --transpile-only src/scripts/seedQuestions.ts",
     "seed:firm": "ts-node --transpile-only src/scripts/seedFirmData.ts",
-    "backfill:subscriptions": "ts-node --transpile-only src/scripts/backfillSubscriptions.ts"
+    "backfill:subscriptions": "ts-node --transpile-only src/scripts/backfillSubscriptions.ts",
+    "seed:firm-admin": "ts-node --transpile-only src/scripts/seedFirmAdminData.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [
