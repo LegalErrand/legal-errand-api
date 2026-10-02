@@ -16,6 +16,7 @@ import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
+import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
 import integrationsRoutes from "./integrations.routes";
@@ -165,5 +166,7 @@ router.use(intakeRoutes);
 router.use(integrationsRoutes);
 router.use("/evidence", evidenceRoutes);
 router.use("/", templatesRoutes);
+// The built-in bodies, shared by every firm.
+router.get("/templates/bodies", getTemplateBodiesForFirm);
 
 export default router;

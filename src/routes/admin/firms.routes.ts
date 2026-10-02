@@ -18,6 +18,11 @@ import {
 } from "../../controllers/admin/firmActions.controller";
 import { getFirmInvoices, getRevenue } from "../../controllers/admin/firmBilling.controller";
 import {
+  listTemplateBodies,
+  upsertTemplateBody,
+  deleteTemplateBody,
+} from "../../controllers/admin/templateBodies.controller";
+import {
   getFirmActivity,
   getAllActivity,
   getFirmUsage,
@@ -77,5 +82,11 @@ router.patch("/:id/status", requireFirmAdmin, changeStatus);
 router.post("/:id/trial/extend", requireFirmAdmin, extendTrial);
 router.post("/:id/payment/retry", requireFirmAdmin, retryPayment);
 router.post("/:id/access-request", requireFirmAdmin, requestAccess);
+
+// The 39 built-in template bodies LegalErrand ships. Platform-level, not
+// firm-scoped — every firm reads the same documents.
+router.get("/template-bodies", listTemplateBodies);
+router.put("/template-bodies/:templateId", upsertTemplateBody);
+router.delete("/template-bodies/:templateId", deleteTemplateBody);
 
 export default router;
