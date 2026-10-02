@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import { ReviewQueueItem, FirmTimeEntry } from "../../models/firm";
 import { sendSuccess, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getReviewQueue = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { type, status } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (type && type !== "all") filter.type = type;
     if (status && status !== "all") filter.status = status;
@@ -19,8 +21,9 @@ export const getReviewQueue = async (req: Request, res: Response): Promise<void>
 
 export const getReviewItemById = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
-    const item = await ReviewQueueItem.findById(id);
+    const item = await ReviewQueueItem.findOne({ _id: id, firmId });
     if (!item) {
       sendNotFound(res, "Review item not found");
       return;
@@ -33,10 +36,11 @@ export const getReviewItemById = async (req: Request, res: Response): Promise<vo
 
 export const actionReviewItem = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { action, feedback, logHours } = req.body; // action: 'approve' | 'request_changes' | 'sign_off'
 
-    const item = await ReviewQueueItem.findById(id);
+    const item = await ReviewQueueItem.findOne({ _id: id, firmId });
     if (!item) {
       sendNotFound(res, "Review item not found");
       return;

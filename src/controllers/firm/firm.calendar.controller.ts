@@ -2,11 +2,13 @@ import { Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
 import { CalendarEvent } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getCalendarEvents = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { type, month, lawyer } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (type && type !== "all") filter.type = type;
     if (lawyer && lawyer !== "all") filter.lawyer = lawyer;
@@ -50,8 +52,9 @@ export const createCalendarEvent = async (req: FirmAuthRequest, res: Response): 
 
 export const startHearingPrep = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
-    const event = await CalendarEvent.findById(id);
+    const event = await CalendarEvent.findOne({ _id: id, firmId });
     if (!event) {
       sendNotFound(res, "Court hearing event not found");
       return;
