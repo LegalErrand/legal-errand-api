@@ -30,6 +30,7 @@ export * from "./Integration";
 export * from "./EvidenceItem";
 export * from "./EvidenceRequest";
 export * from "./FirmTemplate";
+export * from "./FirmClause";
 export * from "./Signature";
 export * from "./BuiltInTemplateBody";
 export * from "./DocumentVersion";

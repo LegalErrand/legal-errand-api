@@ -17,6 +17,7 @@ import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
 import * as docsEditorCtrl from "../../controllers/firm/firm.docsEditor.controller";
+import * as clauseCtrl from "../../controllers/firm/firm.clauses.controller";
 import * as clientInvoiceCtrl from "../../controllers/firm/firm.clientInvoices.controller";
 import bulkMoveRoutes from "./bulkMove.routes";
 import officeAdminRoutes from "./officeAdmin.routes";
@@ -132,6 +133,26 @@ router.get("/documents/:id/comments", docsEditorCtrl.listComments);
 router.post("/documents/:id/comments", docsEditorCtrl.createComment);
 router.post("/documents/:id/comments/:commentId/replies", docsEditorCtrl.replyToComment);
 router.patch("/documents/:id/comments/:commentId/resolve", docsEditorCtrl.resolveComment);
+
+// Attaching a matter is what makes the matter fields and the approval chain
+// resolvable, so these sit together.
+router.patch("/documents/:id/matter", docsEditorCtrl.attachMatter);
+router.get("/documents/:id/shares", docsEditorCtrl.listShares);
+router.post("/documents/:id/share", docsEditorCtrl.shareDocument);
+// Nothing a junior or the AI writes leaves the firm without a person approving
+// it; this is that handoff.
+router.post("/documents/:id/send-for-review", docsEditorCtrl.sendForReview);
+
+// LE-027 — Word export, done on the server so every caller gets the same file.
+router.post("/documents/:id/export/docx", docsEditorCtrl.exportDocx);
+
+// ─── Clause library (LE-029) ─────────────────────────────────────────────────
+// Ships empty on purpose: these are clauses that end up in filed documents, so
+// the text comes from the firm rather than from us.
+router.get("/clauses", clauseCtrl.listClauses);
+router.post("/clauses", clauseCtrl.createClause);
+router.patch("/clauses/:id", clauseCtrl.updateClause);
+router.delete("/clauses/:id", clauseCtrl.deleteClause);
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 router.get("/tasks", taskCtrl.getTasks);

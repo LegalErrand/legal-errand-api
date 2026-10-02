@@ -30,6 +30,18 @@ export interface IFirmDocument extends Document {
   aiTags: string[];
   source?: "ai_draft" | "client_upload" | "template" | "filed";
   content?: string;
+  /**
+   * LE-026 "Share with colleagues". Firm members the document has been shared
+   * with, denormalised so the editor can list them without a second lookup.
+   * Membership is still re-verified against the firm on every write.
+   */
+  sharedWith?: Array<{
+    memberId: Types.ObjectId;
+    memberName: string;
+    memberInitials?: string;
+    role?: string;
+    sharedAt: Date;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +80,15 @@ const FirmDocumentSchema = new Schema<IFirmDocument>(
       default: "ai_draft",
     },
     content: { type: String },
+    sharedWith: [
+      {
+        memberId: { type: Schema.Types.ObjectId, ref: "FirmMember", required: true },
+        memberName: { type: String, required: true },
+        memberInitials: { type: String },
+        role: { type: String },
+        sharedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,

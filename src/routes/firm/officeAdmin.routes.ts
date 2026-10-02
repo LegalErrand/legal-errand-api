@@ -23,6 +23,11 @@ router.get("/operations", officeAdminCtrl.getOperations);
 router.get("/technology", officeAdminCtrl.getTechnology);
 router.get("/strategy", officeAdminCtrl.getStrategy);
 
+// ─── The admin assistant ─────────────────────────────────────────────────────
+// Office data only. It builds its own context server-side and takes no matter
+// context from the body — see the handler.
+router.post("/ask", officeAdminCtrl.askOfficeAdmin);
+
 // ─── Accounts ────────────────────────────────────────────────────────────────
 // Above /registers/:kind so "accounts" is never read as a register name.
 router.post("/accounts", officeAdminCtrl.upsertAccount);

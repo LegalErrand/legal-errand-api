@@ -22,6 +22,8 @@ import {
   sendForbidden,
 } from "../../utils/response";
 import { firmIdOf, memberIdOf, roleOf } from "../../utils/tenancy";
+import { deepseekService } from "../../services/ai/deepseek.service";
+import { ConversationMessage } from "../../types";
 
 /**
  * LE-011 — Firm admin (office manager) dashboard.
@@ -818,5 +820,224 @@ export const deleteAccount = async (req: Request, res: Response): Promise<void> 
     sendSuccess(res, { id: req.params.id }, "Account deleted");
   } catch (error) {
     sendBadRequest(res, "Failed to delete the account", error);
+  }
+};
+
+// ─── The admin assistant ─────────────────────────────────────────────────────
+
+/**
+ * LE-011's admin AI box — "Ask LegalErrand — firm administration".
+ *
+ * This is a separate handler from `firm.ai.controller.askAssistant` on purpose.
+ * That one takes a `matterContext` string from the client and will answer about
+ * the work. This one builds its own context, server-side, from office data
+ * only, and takes nothing from the body except the question and the prior
+ * turns. There is no parameter through which a caller could hand it matter
+ * content, and nothing it reads could contain any:
+ *
+ *  • registers — the office's own rows (title, status, dates, money, people)
+ *  • counters — headcount, and matters *counted* (never read)
+ *  • invoice money — totals and what is outstanding, with `lines` projected out
+ *  • calendar logistics — the same allow-list `courtDiary` uses
+ *  • account balances — office and client, reported apart
+ *
+ * No FirmDocument, DocumentVersion, DocumentComment, FirmNote, FirmMessage,
+ * EvidenceItem, ReviewQueueItem or AIApprovalAction is imported into this file,
+ * so there is no code path from this handler to a matter's contents. The system
+ * prompt states the same limit, so the model declines rather than guesses when
+ * asked something it has no business answering.
+ */
+const OFFICE_ADMIN_AI_CONTEXT = [
+  "You are the assistant to the office manager (firm administrator) of a Nigerian law firm.",
+  "You help with the running of the office: money owed and collected, suppliers, statutory",
+  "deadlines to FIRS, LIRS and the pension authorities, staff leave and cover, practising",
+  "certificates and NBA dues, assets, rooms, errands and the logistics around court dates.",
+  "",
+  "You cannot read matter content, and you must never pretend otherwise. You do not have a",
+  "matter's documents, notes, messages, advice, instructions, pleadings, evidence or invoice",
+  "line items, and you never will — that material is privileged and the office manager is not",
+  "entitled to it. A matter may appear to you only as a name beside a diary slot or an invoice.",
+  "If the question needs to know what a matter says, says who advised what, or asks you to",
+  "summarise or draft anything about the substance of a case, say plainly that matter content",
+  "is not available to the office manager's assistant and point them to the fee earner on it.",
+  "Do not speculate about case content from a matter's name.",
+  "",
+  "Answer only from the OFFICE DATA given below. If the answer is not in it, say what is",
+  "missing rather than inventing a figure, a date or a name.",
+  "Write in plain prose only: no markdown, no asterisks, no headings, no bullet or numbered",
+  "lists. The client renders raw text. Keep it to 1 to 4 short paragraphs.",
+  "Money is in naira. Anything you draft for a supplier or a staff member is a draft and needs",
+  "a person to approve it before it is sent.",
+].join(" ");
+
+/** Chips offered under a reply — all office work, none of it matter work. */
+const OFFICE_ADMIN_CHIPS = ["Draft the chase email", "Add it to a register", "Show me next month"];
+
+/** One register row, flattened to the few fields the model needs. */
+function briefEntry(e: PresentedEntry): string {
+  const bits = [
+    e.title,
+    e.status !== "open" ? `status ${e.status}` : null,
+    e.personName ? `person ${e.personName}` : null,
+    e.coverName ? `cover ${e.coverName}` : null,
+    e.vendorName ? `vendor ${e.vendorName}` : null,
+    e.amountNaira != null ? `₦${Math.round(e.amountNaira).toLocaleString("en-NG")}` : null,
+    e.quantityTotal != null ? `${e.quantityUsed ?? 0} of ${e.quantityTotal}` : null,
+    e.progressPct != null ? `${e.progressPct}%` : null,
+    e.startOn ? `from ${new Date(e.startOn).toISOString().slice(0, 10)}` : null,
+    e.endOn ? `to ${new Date(e.endOn).toISOString().slice(0, 10)}` : null,
+    e.dueOn ? `due ${new Date(e.dueOn).toISOString().slice(0, 10)}` : null,
+    e.alertTier ? `alert ${e.alertTier}` : null,
+    e.location ? `at ${e.location}` : null,
+    e.reference ? `ref ${e.reference}` : null,
+    e.reason ? `reason ${e.reason}` : null,
+  ].filter(Boolean);
+  return `- ${bits.join("; ")}`;
+}
+
+/**
+ * The whole of what the assistant is given. Built here rather than taken from
+ * the request, which is what makes the limit above a control and not a promise.
+ */
+async function buildOfficeContext(firmId: string): Promise<string> {
+  const today = startOfToday();
+  const todayISO = today.toISOString().slice(0, 10);
+
+  const [registers, invoices, accounts, members, matterCount, diary] = await Promise.all([
+    OfficeRegisterEntry.find({ firmId }).sort({ dueOn: 1, createdAt: -1 }),
+    // Money only: `lines` describe the work and are projected out.
+    ClientInvoice.find({ firmId, status: { $ne: "draft" } })
+      .select("reference clientName totalNaira paidNaira status dueOn")
+      .sort({ dueOn: 1 })
+      .lean(),
+    FirmOfficeAccount.find({ firmId }).lean(),
+    FirmMember.find({ firmId, isActive: true }).select("name role").sort({ name: 1 }).lean(),
+    // Counted, never read.
+    Matter.countDocuments({ firmId }),
+    courtDiary(firmId, todayISO, addDays(today, 30).toISOString().slice(0, 10)),
+  ]);
+
+  const rows = registers.map(presentEntry);
+  const byKind = new Map<string, PresentedEntry[]>();
+  for (const r of rows) {
+    const list = byKind.get(r.kind) ?? [];
+    list.push(r);
+    byKind.set(r.kind, list);
+  }
+
+  const billed = invoices.reduce((s, i) => s + (i.totalNaira ?? 0), 0);
+  const collected = invoices.reduce((s, i) => s + (i.paidNaira ?? 0), 0);
+
+  const overdue = invoices
+    .map((i) => {
+      const outstanding = Math.max(0, (i.totalNaira ?? 0) - (i.paidNaira ?? 0));
+      const due = i.dueOn ? new Date(i.dueOn) : null;
+      const days = due ? Math.round((today.getTime() - due.getTime()) / 86_400_000) : 0;
+      return { reference: i.reference, clientName: i.clientName, outstanding, days };
+    })
+    .filter((i) => i.outstanding > 0 && i.days > 0)
+    .sort((a, b) => b.days - a.days)
+    .slice(0, 20);
+
+  const naira = (n: number) => `₦${Math.round(n).toLocaleString("en-NG")}`;
+  const sumOf = (t: "office" | "client") =>
+    accounts.filter((a) => a.accountType === t).reduce((s, a) => s + (a.balanceNaira ?? 0), 0);
+
+  const parts: string[] = [
+    `OFFICE DATA. Today is ${todayISO}.`,
+    "",
+    "PEOPLE (name and role only):",
+    members.length
+      ? members.map((m) => `- ${m.name}, ${m.role.replace(/_/g, " ")}`).join("\n")
+      : "- none recorded",
+    "",
+    `COUNTERS: headcount ${members.length}; matters open ${matterCount} (a count only — the contents of a matter are not available to you).`,
+    "",
+    "MONEY (totals and balances only; invoice line items are not available to you):",
+    `- billed ${naira(billed)}; collected ${naira(collected)}; outstanding ${naira(Math.max(0, billed - collected))}`,
+    `- office account balance ${naira(sumOf("office"))}`,
+    `- client account balance ${naira(sumOf("client"))} — held on trust, never the firm's, and never added to the office account`,
+    "",
+    "INVOICES OVERDUE (oldest first; anything past 60 days is reported to the partners weekly):",
+    overdue.length
+      ? overdue
+          .map(
+            (i) =>
+              `- ${i.reference}, ${i.clientName}, ${naira(i.outstanding)} outstanding, ${i.days} days overdue`
+          )
+          .join("\n")
+      : "- nothing overdue",
+    "",
+    "COURT DIARY, NEXT 30 DAYS — logistics only (who goes where and when). What the matter says is not available to you:",
+    diary.length
+      ? diary
+          .map(
+            (d) =>
+              `- ${d.date}${d.time ? ` ${d.time}` : ""}, ${d.type}, matter "${d.matterName ?? "unnamed"}", attending ${d.lawyer ?? "nobody recorded"}, at ${d.location ?? "no venue recorded"}`
+          )
+          .join("\n")
+      : "- nothing in the diary",
+  ];
+
+  for (const kind of OFFICE_REGISTER_KINDS) {
+    const list = byKind.get(kind);
+    if (!list?.length) continue;
+    parts.push("", `REGISTER ${kind.replace(/_/g, " ").toUpperCase()}:`);
+    parts.push(list.slice(0, 40).map(briefEntry).join("\n"));
+  }
+
+  return parts.join("\n");
+}
+
+export const askOfficeAdmin = async (req: Request, res: Response): Promise<void> => {
+  if (!assertAdmin(req, res)) return;
+  try {
+    const firmId = firmIdOf(req);
+    // Only the question and the prior turns. Deliberately no `matterContext`:
+    // there is no parameter here through which matter content could be injected.
+    const { message, history } = req.body as {
+      message?: string;
+      history?: Array<{ role?: string; content?: string }>;
+    };
+
+    if (!message || !message.trim()) {
+      sendBadRequest(res, "Ask a question first");
+      return;
+    }
+
+    const priorTurns: ConversationMessage[] = Array.isArray(history)
+      ? history
+          .filter((m) => typeof m?.content === "string" && m.content.trim())
+          .slice(-10)
+          .map((m) => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: String(m.content),
+            timestamp: new Date(),
+          }))
+      : [];
+
+    const context = await buildOfficeContext(firmId);
+
+    const reply = await deepseekService.chatWithHistory(
+      [...priorTurns, { role: "user", content: message.trim(), timestamp: new Date() }],
+      `${OFFICE_ADMIN_AI_CONTEXT}\n\n${context}`
+    );
+
+    sendSuccess(
+      res,
+      {
+        reply,
+        chips: OFFICE_ADMIN_CHIPS,
+        cannotSee: [
+          "anything a matter says — its documents, notes, messages or AI activity",
+          "invoice line items, which describe the work done",
+          "advice given to a client",
+          "another firm's data",
+        ],
+      },
+      "Assistant reply generated"
+    );
+  } catch (error) {
+    sendBadRequest(res, "Failed to answer the question", error);
   }
 };
