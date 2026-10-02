@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import { Firm, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
 import { emailService } from "../../services/email/email.service";
 import { env } from "../../config/env";
+import { logger } from "../../utils/logger";
 import { FirmAuthRequest } from "../../types/firm";
 import {
   sendSuccess,
@@ -20,6 +21,18 @@ function signFirmToken(memberId: string, firmId: string, email: string, role: st
   return jwt.sign({ memberId, firmId, email, role, scope: "firm" }, env.JWT_SECRET, {
     expiresIn: "7d",
   });
+}
+
+/**
+ * The session a verified member gets, however they proved who they are —
+ * password plus emailed code, a magic link, or SSO. Exported so the SSO
+ * controller issues exactly the same token rather than its own near-copy.
+ */
+export function signFirmSession(
+  member: { _id: unknown; email: string; role: string },
+  firm: { _id: unknown }
+): string {
+  return signFirmToken(String(member._id), String(firm._id), member.email, member.role);
 }
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -215,6 +228,7 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       }
     );
     await emailService.sendFirmLoginOtp(member.email, code);
+    devRevealCode("login code", member.email, code);
 
     sendSuccess(
       res,
@@ -276,6 +290,21 @@ const sha256 = (value: string): string => crypto.createHash("sha256").update(val
 
 /** Six digits, uniformly distributed — Math.random is not used for secrets. */
 const generateCode = (): string => String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+
+/**
+ * Prints a one-time code to the server log so a developer can finish a login
+ * locally without an inbox.
+ *
+ * Gated on NODE_ENV === "development" exactly, not on `!== "production"`, so a
+ * staging deployment never prints one. The code is still hashed and emailed
+ * normally — this only mirrors it to the console.
+ */
+const devRevealCode = (label: string, recipient: string, code: string): void => {
+  if (env.NODE_ENV !== "development") return;
+  logger.warn(
+    `[dev] ${label} for ${recipient}: ${code} — development only, never printed elsewhere`
+  );
+};
 
 const isEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(value.trim());
 
@@ -347,6 +376,7 @@ async function issueSignupCode(signup: IFirmSignup): Promise<string> {
   signup.codeAttempts = 0;
   signup.lastCodeSentAt = new Date();
   await signup.save();
+  devRevealCode("signup code", signup.email, code);
   return code;
 }
 
@@ -769,6 +799,7 @@ export const resendLoginOtp = async (req: Request, res: Response): Promise<void>
       }
     );
     await emailService.sendFirmLoginOtp(member.email, code);
+    devRevealCode("login code", member.email, code);
 
     sendSuccess(res, { retryAfterSeconds: 60 }, "Verification code sent");
   } catch (error) {

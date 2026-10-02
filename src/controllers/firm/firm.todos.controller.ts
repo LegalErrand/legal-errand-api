@@ -241,10 +241,9 @@ export const createTodo = async (req: Request, res: Response): Promise<void> => 
       sendBadRequest(res, "To-do text is required");
       return;
     }
-    if (!fields.date) {
-      sendBadRequest(res, "date is required (YYYY-MM-DD)");
-      return;
-    }
+    // LE-021: "type and press Enter to add without details". A quick-added
+    // to-do has no date, so requiring one here breaks the primary way of
+    // adding them.
 
     const todo = await FirmTodo.create({ ...fields, firmId, ownerId });
     sendCreated(res, todo, "To-do created");
@@ -332,7 +331,8 @@ export const completeTodo = async (req: Request, res: Response): Promise<void> =
 
     // Only on the transition into done, so ticking an already-done to-do again
     // cannot spawn a second copy of the same occurrence.
-    if (done && !wasDone && todo.repeat !== "none") {
+    // A to-do with no date cannot recur — there is nothing to advance from.
+    if (done && !wasDone && todo.repeat !== "none" && todo.date) {
       const nextDate = nextOccurrence(todo.date, todo.repeat, todo.repeatUntil);
       if (nextDate) {
         next = await FirmTodo.create({

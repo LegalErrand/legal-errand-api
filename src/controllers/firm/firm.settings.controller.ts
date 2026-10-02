@@ -123,3 +123,45 @@ export const getEscalationRules = async (req: Request, res: Response): Promise<v
     sendBadRequest(res, "Failed to retrieve escalation rules", error);
   }
 };
+
+/**
+ * PATCH /firm/settings/sso — { requiresSso, ssoProvider }
+ *
+ * Turning this on hides password sign-in for the whole firm, so it is refused
+ * unless a provider is named: a firm that requires SSO without one could not
+ * sign in at all.
+ */
+export const updateSsoPolicy = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const firmId = firmIdOf(req);
+    const { requiresSso, ssoProvider } = req.body as {
+      requiresSso?: boolean;
+      ssoProvider?: "google" | "microsoft";
+    };
+
+    if (requiresSso && ssoProvider !== "google" && ssoProvider !== "microsoft") {
+      sendBadRequest(res, "Choose Google or Microsoft before requiring single sign-on");
+      return;
+    }
+
+    const firm = await Firm.findById(firmId);
+    if (!firm) {
+      sendNotFound(res, "Firm not found");
+      return;
+    }
+
+    firm.requiresSso = Boolean(requiresSso);
+    firm.ssoProvider = requiresSso ? ssoProvider : undefined;
+    await firm.save();
+
+    sendSuccess(
+      res,
+      { requiresSso: firm.requiresSso, ssoProvider: firm.ssoProvider ?? null },
+      firm.requiresSso
+        ? "Staff now sign in with single sign-on"
+        : "Password sign-in is available again"
+    );
+  } catch (error) {
+    sendBadRequest(res, "Failed to update the sign-in policy", error);
+  }
+};

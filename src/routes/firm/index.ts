@@ -15,6 +15,8 @@ import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
+import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
+import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
 import integrationsRoutes from "./integrations.routes";
@@ -41,6 +43,13 @@ router.post("/auth/signup/firm", authIpRateLimit, authCtrl.completeFirmSetup);
 router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);
 router.post("/auth/login/verify", authIpRateLimit, authCtrl.verifyLoginOtp);
 router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
+
+// Single sign-on (LE-001 req. 11). Public: the person has no session yet.
+// SSO issues a session directly — no emailed code — because the identity
+// provider has already applied its own second factor and no password of ours
+// is involved.
+router.get("/auth/sso/policy", authIpRateLimit, ssoCtrl.getSsoPolicy);
+router.post("/auth/sso", authIpRateLimit, ssoCtrl.signInWithSso);
 
 // Password recovery.
 router.post("/auth/forgot-password", authIpRateLimit, authCtrl.requestPasswordReset);
@@ -149,6 +158,7 @@ router.post("/ai/chat", aiCtrl.askAssistant);
 // ─── Settings & Escalation ───────────────────────────────────────────────────
 router.get("/settings", settCtrl.getFirmSettings);
 router.patch("/settings/autonomy", settCtrl.updateAIAutonomy);
+router.patch("/settings/sso", settCtrl.updateSsoPolicy);
 router.get("/settings/escalation", settCtrl.getEscalationRules);
 
 // ─── Intake form, integrations, evidence, templates and signatures ───────────
@@ -156,5 +166,7 @@ router.use(intakeRoutes);
 router.use(integrationsRoutes);
 router.use("/evidence", evidenceRoutes);
 router.use("/", templatesRoutes);
+// The built-in bodies, shared by every firm.
+router.get("/templates/bodies", getTemplateBodiesForFirm);
 
 export default router;

@@ -18,7 +18,9 @@
     "seed:questions": "ts-node --transpile-only src/scripts/seedQuestions.ts",
     "seed:firm": "ts-node --transpile-only src/scripts/seedFirmData.ts",
     "backfill:subscriptions": "ts-node --transpile-only src/scripts/backfillSubscriptions.ts",
-    "seed:firm-admin": "ts-node --transpile-only src/scripts/seedFirmAdminData.ts"
+    "seed:firm-admin": "ts-node --transpile-only src/scripts/seedFirmAdminData.ts",
+    "seed:dev-login": "ts-node --transpile-only src/scripts/seedDevLogin.ts",
+    "migrate:plan-names": "ts-node --transpile-only src/scripts/migratePlanNames.ts"
   },
   "lint-staged": {
     "src/**/*.ts": [

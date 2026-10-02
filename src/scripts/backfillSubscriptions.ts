@@ -13,7 +13,7 @@ import fs from "fs";
 import path from "path";
 import mongoose from "mongoose";
 import { Firm, FirmMember, Subscription } from "../models/firm";
-import { FirmPlan, legacyPlanFor, listPriceFor, seatsFor } from "../config/plans";
+import { FirmPlan, listPriceFor, seatsFor } from "../config/plans";
 
 function loadEnv(): void {
   const envPath = path.resolve(__dirname, "../../.env");
@@ -132,10 +132,9 @@ async function main(): Promise<void> {
         mrr,
         startedAt: firm.createdAt ?? new Date(),
       });
-      // Keep the deprecated field in step, since the firm app still reads it.
-      const legacy = legacyPlanFor(plan);
-      if (firm.subscriptionPlan !== legacy) {
-        firm.subscriptionPlan = legacy;
+      // The field now holds the catalogue's own name.
+      if (firm.subscriptionPlan !== plan) {
+        firm.subscriptionPlan = plan;
         await firm.save();
       }
     }
