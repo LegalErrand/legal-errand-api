@@ -10,7 +10,7 @@ import {
   Subscription,
   SupportTicket,
 } from "../../models/firm";
-import { FirmPlan, isFirmPlan, legacyPlanFor, listPriceFor, seatsFor } from "../../config/plans";
+import { FirmPlan, isFirmPlan, listPriceFor, seatsFor } from "../../config/plans";
 import { recordAdminAction, adminNameFor } from "../../services/firm/audit.service";
 import { sendSuccess, sendNotFound, sendError } from "../../utils/response";
 
@@ -82,10 +82,10 @@ export const changePlan = async (req: AdminRequest, res: Response): Promise<void
     subscription.mrr = subscription.status === "trialing" ? 0 : (mrr ?? listPriceFor(plan));
     await subscription.save();
 
-    // Keep the deprecated field in step — legalerrand-firm-app still reads it.
-    const legacy = legacyPlanFor(plan);
-    if (firm.subscriptionPlan !== legacy) {
-      firm.subscriptionPlan = legacy;
+    // The firm's own field now holds the catalogue's name, so it is set to the
+    // plan itself rather than mapped down to a coarser one.
+    if (firm.subscriptionPlan !== plan) {
+      firm.subscriptionPlan = plan;
       await firm.save();
     }
 

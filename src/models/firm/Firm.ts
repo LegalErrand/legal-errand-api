@@ -1,4 +1,5 @@
 import { Schema, model, Document } from "mongoose";
+import { FIRM_PLANS, FirmPlan } from "../../config/plans";
 
 export interface IFirm extends Document {
   name: string;
@@ -23,11 +24,11 @@ export interface IFirm extends Document {
   /** State, province, nation or region — whatever that country calls its own. */
   state?: string;
   /**
-   * @deprecated Superseded by the firm's Subscription, which carries the real
-   * plan and its price. Kept in step by legacyPlanFor() because
-   * legalerrand-firm-app still reads it; remove once that app moves across.
+   * The firm's plan, in the catalogue's own names. The Subscription still
+   * carries the authoritative price and seat count; this is the coarse value
+   * screens read.
    */
-  subscriptionPlan: "starter" | "professional" | "enterprise";
+  subscriptionPlan: FirmPlan;
   feeEarnerCapacity: number;
   aiAutonomy: {
     intakeExtraction: "auto" | "review" | "partner";
@@ -59,8 +60,8 @@ const FirmSchema = new Schema<IFirm>(
     state: { type: String, trim: true, index: true },
     subscriptionPlan: {
       type: String,
-      enum: ["starter", "professional", "enterprise"],
-      default: "enterprise",
+      enum: FIRM_PLANS,
+      default: "starter",
     },
     feeEarnerCapacity: { type: Number, default: 10 },
     aiAutonomy: {

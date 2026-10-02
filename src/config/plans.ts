@@ -15,17 +15,31 @@ export type FirmPlan = (typeof FIRM_PLANS)[number];
 export interface PlanDetails {
   /** How the plan is written on a screen or an invoice. */
   label: string;
-  /** Naira per month, or null when the price is negotiated. */
-  priceNgn: number | null;
+  /** Naira per month. */
+  priceNgn: number;
+  /** Naira per year. Two months free against twelve at the monthly rate. */
+  annualNgn: number;
+  /**
+   * True when the price is a floor rather than a figure — Enterprise is
+   * negotiated upwards from here, and the agreed amount lives on that firm's
+   * subscription.
+   */
+  from?: boolean;
   /** Seats included. Enterprise starts here and is agreed upwards. */
   seats: number;
 }
 
 export const PLAN_CATALOGUE: Record<FirmPlan, PlanDetails> = {
-  starter: { label: "Starter", priceNgn: 25_000, seats: 2 },
-  practice: { label: "Practice", priceNgn: 50_000, seats: 5 },
-  firm: { label: "Firm", priceNgn: 75_000, seats: 10 },
-  enterprise: { label: "Enterprise", priceNgn: null, seats: 12 },
+  starter: { label: "Starter", priceNgn: 25_000, annualNgn: 250_000, seats: 2 },
+  practice: { label: "Practice", priceNgn: 50_000, annualNgn: 500_000, seats: 5 },
+  firm: { label: "Firm", priceNgn: 75_000, annualNgn: 750_000, seats: 10 },
+  enterprise: {
+    label: "Enterprise",
+    priceNgn: 200_000,
+    annualNgn: 2_000_000,
+    from: true,
+    seats: 11,
+  },
 };
 
 export const isFirmPlan = (value: unknown): value is FirmPlan =>
@@ -38,23 +52,28 @@ export const nextPlanUp = (plan: FirmPlan): FirmPlan | null => {
 };
 
 /**
- * Firm.subscriptionPlan predates this catalogue and still uses
- * starter | professional | enterprise. The firm app reads it, so it has to keep
- * answering until that app moves across — see the note on the field itself.
+ * The old starter | professional | enterprise values, kept only so existing
+ * rows can be read and migrated. Nothing writes these any more:
+ * Firm.subscriptionPlan now holds a FirmPlan.
  *
- * Practice and Firm both fold into "professional", which is lossy. That is
- * acceptable only because the legacy field gates coarse features, never price:
- * the real plan is always the subscription's.
+ * "professional" was lossy — Practice and Firm both folded into it — so a
+ * migration cannot recover which one a firm was on. It maps to practice, the
+ * cheaper of the two, because over-charging a firm on a guess is worse than
+ * under-charging one.
  */
 export type LegacyFirmPlan = "starter" | "professional" | "enterprise";
 
-export const legacyPlanFor = (plan: FirmPlan): LegacyFirmPlan => {
-  if (plan === "starter") return "starter";
-  if (plan === "enterprise") return "enterprise";
-  return "professional";
+export const planFromLegacyValue = (value: string): FirmPlan => {
+  if (value === "starter") return "starter";
+  if (value === "enterprise") return "enterprise";
+  if (value === "professional") return "practice";
+  return isFirmPlan(value) ? value : "starter";
 };
 
 /** What a firm on this plan pays each month, before any negotiated figure. */
-export const listPriceFor = (plan: FirmPlan): number => PLAN_CATALOGUE[plan].priceNgn ?? 0;
+export const listPriceFor = (plan: FirmPlan): number => PLAN_CATALOGUE[plan].priceNgn;
+
+/** What a firm on this plan pays for a year — ten months' worth, not twelve. */
+export const annualPriceFor = (plan: FirmPlan): number => PLAN_CATALOGUE[plan].annualNgn;
 
 export const seatsFor = (plan: FirmPlan): number => PLAN_CATALOGUE[plan].seats;
