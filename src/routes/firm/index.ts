@@ -16,6 +16,7 @@ import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
+import * as docsEditorCtrl from "../../controllers/firm/firm.docsEditor.controller";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
@@ -109,6 +110,22 @@ router.get("/documents", docCtrl.getDocuments);
 router.post("/documents/generate", docCtrl.generateDocumentDraft);
 router.get("/documents/:id/review", docCtrl.reviewAndChat);
 router.post("/documents/:id/chat", docCtrl.reviewAndChat);
+
+// ─── Docs editor (LE-026 / LE-027) ───────────────────────────────────────────
+// Nothing here overwrites: a save adds a version on top, and a restore adds
+// the old content as a new version rather than rolling back.
+router.get("/documents/:id/editor", docsEditorCtrl.getEditorDocument);
+router.patch("/documents/:id/content", docsEditorCtrl.saveEditorContent);
+router.post("/documents/:id/rename", docsEditorCtrl.renameEditorDocument);
+router.post("/documents/:id/copy", docsEditorCtrl.copyEditorDocument);
+router.get("/documents/:id/versions", docsEditorCtrl.listVersions);
+router.post("/documents/:id/versions", docsEditorCtrl.createVersion);
+router.get("/documents/:id/versions/:versionId", docsEditorCtrl.getVersion);
+router.post("/documents/:id/versions/:versionId/restore", docsEditorCtrl.restoreVersion);
+router.get("/documents/:id/comments", docsEditorCtrl.listComments);
+router.post("/documents/:id/comments", docsEditorCtrl.createComment);
+router.post("/documents/:id/comments/:commentId/replies", docsEditorCtrl.replyToComment);
+router.post("/documents/:id/comments/:commentId/resolve", docsEditorCtrl.resolveComment);
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 router.get("/tasks", taskCtrl.getTasks);

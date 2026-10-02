@@ -32,3 +32,5 @@ export * from "./EvidenceRequest";
 export * from "./FirmTemplate";
 export * from "./Signature";
 export * from "./BuiltInTemplateBody";
+export * from "./DocumentVersion";
+export * from "./DocumentComment";
