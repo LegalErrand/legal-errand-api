@@ -11,6 +11,26 @@ export interface IClient extends Document {
   phone?: string;
   email?: string;
   whatsappNumber?: string;
+  address?: string;
+  /** CAC registration number — companies only. */
+  rcNumber?: string;
+  /** Individuals only. */
+  occupation?: string;
+  /** Companies only: who to speak to, and in what capacity. */
+  contactPerson?: string;
+  contactRole?: string;
+  preferredChannel?: "whatsapp" | "phone" | "email" | "sms";
+  /** How the client found the firm — referral, online, and so on. */
+  howFound?: string;
+  tags: string[];
+  notes?: string;
+  /** IANA zone, e.g. "Africa/Lagos". */
+  timeZone?: string;
+  /** When the relationship began (YYYY-MM-DD). */
+  clientSince?: string;
+  /** Name of the member who last edited the record, for the audit line. */
+  lastChangedBy?: string;
+  lastChangedAt?: Date;
   mattersCount: number;
   lawyerId?: Types.ObjectId;
   lawyerName?: string;
@@ -48,6 +68,19 @@ const ClientSchema = new Schema<IClient>(
     phone: { type: String, trim: true },
     email: { type: String, lowercase: true, trim: true },
     whatsappNumber: { type: String, trim: true },
+    address: { type: String, trim: true },
+    rcNumber: { type: String, trim: true },
+    occupation: { type: String, trim: true },
+    contactPerson: { type: String, trim: true },
+    contactRole: { type: String, trim: true },
+    preferredChannel: { type: String, enum: ["whatsapp", "phone", "email", "sms"] },
+    howFound: { type: String, trim: true },
+    tags: { type: [String], default: [] },
+    notes: { type: String },
+    timeZone: { type: String, trim: true },
+    clientSince: { type: String, trim: true },
+    lastChangedBy: { type: String },
+    lastChangedAt: { type: Date },
     mattersCount: { type: Number, default: 0 },
     lawyerId: { type: Schema.Types.ObjectId, ref: "FirmMember" },
     lawyerName: { type: String },

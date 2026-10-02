@@ -9,6 +9,12 @@ export interface IFirm extends Document {
   contactEmail: string;
   address?: string;
   /**
+   * URL-safe handle for the firm's public pages — the public intake form is
+   * reached by it, so a prospective client never needs an id or a login.
+   * Derived from the name when absent.
+   */
+  slug?: string;
+  /**
    * Where the firm is, structured. `jurisdiction` says which court they file in,
    * which is a different question and a free-text one — it cannot be filtered or
    * grouped, and the firm admin needs to do both.
@@ -46,6 +52,9 @@ const FirmSchema = new Schema<IFirm>(
     registrationNumber: { type: String, trim: true },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
     address: { type: String, trim: true },
+    // Sparse: firms created before this field existed have no slug, and a
+    // unique index would otherwise collide on null for all of them.
+    slug: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     country: { type: String, trim: true, default: "Nigeria", index: true },
     state: { type: String, trim: true, index: true },
     subscriptionPlan: {

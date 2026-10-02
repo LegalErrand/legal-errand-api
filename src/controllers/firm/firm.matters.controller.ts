@@ -2,11 +2,13 @@ import { Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
 import { Matter, FirmTask, FirmDocument } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getMatters = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { stage, type, health, lawyer, search } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (stage && stage !== "all") filter.stage = stage;
     if (type && type !== "all") filter.type = type;
@@ -18,10 +20,11 @@ export const getMatters = async (req: FirmAuthRequest, res: Response): Promise<v
 
     const riskCounters = {
       deadlineWithin7Days: await Matter.countDocuments({
+        firmId,
         nextDeadline: { $regex: "7 days|6 days|2 days", $options: "i" },
       }),
-      noActivity14Days: await Matter.countDocuments({ health: "blocked" }),
-      awaitingClientDocs: await Matter.countDocuments({ health: "awaiting_client" }),
+      noActivity14Days: await Matter.countDocuments({ firmId, health: "blocked" }),
+      awaitingClientDocs: await Matter.countDocuments({ firmId, health: "awaiting_client" }),
     };
 
     sendSuccess(res, { matters, riskCounters }, "Matters retrieved");
@@ -32,8 +35,9 @@ export const getMatters = async (req: FirmAuthRequest, res: Response): Promise<v
 
 export const getMatterById = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
-    const matter = await Matter.findById(id);
+    const matter = await Matter.findOne({ _id: id, firmId });
     if (!matter) {
       sendNotFound(res, "Matter not found");
       return;
@@ -50,10 +54,10 @@ export const getMatterById = async (req: FirmAuthRequest, res: Response): Promis
 
 export const createMatter = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { name, clientId, clientName, type, lawyerName, healthNote } = req.body;
     // Scope comes from the token, never the body — a caller must not be able to
     // write into another firm's data.
-    const firmId = req.member?.firmId;
 
     if (!name || !clientName) {
       sendBadRequest(res, "Matter name and client name are required");
@@ -81,10 +85,11 @@ export const createMatter = async (req: FirmAuthRequest, res: Response): Promise
 
 export const assignWorkToJunior = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { juniorId, juniorName, tasks, brief, internalDeadline, supervisionLevel } = req.body;
 
-    const matter = await Matter.findById(id);
+    const matter = await Matter.findOne({ _id: id, firmId });
     if (!matter) {
       sendNotFound(res, "Matter not found");
       return;

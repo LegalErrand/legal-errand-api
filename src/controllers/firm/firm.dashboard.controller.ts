@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Matter, FirmTask, CalendarEvent, AIApprovalAction } from "../../models/firm";
 import { sendSuccess, sendBadRequest } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 interface Priority {
   label: string;
@@ -11,39 +12,46 @@ interface Priority {
 export const getDashboardSummary = async (req: Request, res: Response): Promise<void> => {
   try {
     // CalendarEvent.date is stored as an ISO `YYYY-MM-DD` string, so compare as strings.
+    const firmId = firmIdOf(req);
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     const now = new Date();
     const todayStr = iso(now);
     const weekAheadStr = iso(new Date(now.getTime() + 7 * 86400000));
 
-    const totalMatters = await Matter.countDocuments();
-    const urgentMatters = await Matter.countDocuments({ health: { $in: ["at_risk", "blocked"] } });
+    const totalMatters = await Matter.countDocuments({ firmId });
+    const urgentMatters = await Matter.countDocuments({
+      firmId,
+      health: { $in: ["at_risk", "blocked"] },
+    });
     const overdueTasks = await FirmTask.countDocuments({
+      firmId,
       status: { $in: ["overdue", "escalated"] },
     });
     const openTasks = await FirmTask.countDocuments({
+      firmId,
       status: { $in: ["not_started", "in_progress"] },
     });
 
     const deadlinesThisWeek = await CalendarEvent.countDocuments({
+      firmId,
       date: { $gte: todayStr, $lte: weekAheadStr },
     });
 
-    const recentMatters = await Matter.find()
+    const recentMatters = await Matter.find({ firmId })
       .sort({ updatedAt: -1 })
       .limit(4)
       .select("name stage health stageProgress nextDeadline lawyerName");
 
-    const todayEvents = await CalendarEvent.find({ date: todayStr }).sort({ time: 1 });
+    const todayEvents = await CalendarEvent.find({ firmId, date: todayStr }).sort({ time: 1 });
 
-    const pendingAI = await AIApprovalAction.find({ status: "pending" })
+    const pendingAI = await AIApprovalAction.find({ firmId, status: "pending" })
       .sort({ confidence: -1 })
       .limit(3);
 
     // Priorities are derived from real records — never invented.
     const priorities: Priority[] = [];
 
-    const atRiskMatters = await Matter.find({ health: { $in: ["at_risk", "blocked"] } })
+    const atRiskMatters = await Matter.find({ firmId, health: { $in: ["at_risk", "blocked"] } })
       .sort({ updatedAt: -1 })
       .limit(3)
       .select("name healthNote health");
@@ -56,7 +64,7 @@ export const getDashboardSummary = async (req: Request, res: Response): Promise<
       });
     }
 
-    const overdue = await FirmTask.find({ status: { $in: ["overdue", "escalated"] } })
+    const overdue = await FirmTask.find({ firmId, status: { $in: ["overdue", "escalated"] } })
       .sort({ dueDate: 1 })
       .limit(3)
       .select("title status");

@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
 import { FirmDocument, Matter } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 import { deepseekService } from "../../services/ai/deepseek.service";
 
 export const getDocuments = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { status, type, matterId, search } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (status && status !== "all") filter.status = status;
     if (type && type !== "all") filter.type = type;
@@ -22,6 +24,7 @@ export const getDocuments = async (req: Request, res: Response): Promise<void> =
 
 export const generateDocumentDraft = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { matterId, templateType, instructions } = req.body as {
       matterId?: string;
       templateType?: string;
@@ -33,7 +36,7 @@ export const generateDocumentDraft = async (req: Request, res: Response): Promis
       return;
     }
 
-    const matter = matterId ? await Matter.findById(matterId) : null;
+    const matter = matterId ? await Matter.findOne({ _id: matterId, firmId }) : null;
 
     const systemContext = [
       "You are drafting a legal document for a Nigerian law firm, for partner review.",
@@ -79,10 +82,11 @@ export const generateDocumentDraft = async (req: Request, res: Response): Promis
 
 export const reviewAndChat = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { message } = req.body as { message?: string };
 
-    const doc = await FirmDocument.findById(id);
+    const doc = await FirmDocument.findOne({ _id: id, firmId });
     if (!doc) {
       sendNotFound(res, "Document not found");
       return;

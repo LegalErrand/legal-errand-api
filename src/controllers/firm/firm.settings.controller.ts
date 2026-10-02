@@ -1,13 +1,18 @@
 import { Request, Response } from "express";
 import { Firm, FirmMember, EscalationRule } from "../../models/firm";
-import { sendSuccess, sendBadRequest } from "../../utils/response";
+import { sendSuccess, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getFirmSettings = async (req: Request, res: Response): Promise<void> => {
   try {
-    const firm = await Firm.findOne();
+    const firmId = firmIdOf(req);
 
-    const members = await FirmMember.find();
-    const escalationRules = await EscalationRule.find();
+    // findOne() returned whichever firm happened to be first in the
+    // collection, which is every other firm's settings.
+    const firm = await Firm.findById(firmId);
+
+    const members = await FirmMember.find({ firmId });
+    const escalationRules = await EscalationRule.find({ firmId });
 
     const accessMatrix = [
       {
@@ -90,16 +95,20 @@ export const getFirmSettings = async (req: Request, res: Response): Promise<void
 
 export const updateAIAutonomy = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { aiAutonomy } = req.body;
-    let firm = await Firm.findOne();
+
+    // Only ever the caller's own firm. Creating one here would have made a
+    // second firm record out of a settings edit.
+    const firm = await Firm.findById(firmId);
     if (!firm) {
-      firm = await Firm.create({
-        aiAutonomy,
-      });
-    } else {
-      firm.aiAutonomy = { ...firm.aiAutonomy, ...aiAutonomy };
-      await firm.save();
+      sendNotFound(res, "Firm not found");
+      return;
     }
+
+    firm.aiAutonomy = { ...firm.aiAutonomy, ...aiAutonomy };
+    await firm.save();
+
     sendSuccess(res, firm.aiAutonomy, "AI autonomy policy updated");
   } catch (error) {
     sendBadRequest(res, "Failed to update autonomy", error);
@@ -108,7 +117,7 @@ export const updateAIAutonomy = async (req: Request, res: Response): Promise<voi
 
 export const getEscalationRules = async (req: Request, res: Response): Promise<void> => {
   try {
-    const rules = await EscalationRule.find();
+    const rules = await EscalationRule.find({ firmId: firmIdOf(req) });
     sendSuccess(res, rules, "Escalation rules retrieved");
   } catch (error) {
     sendBadRequest(res, "Failed to retrieve escalation rules", error);

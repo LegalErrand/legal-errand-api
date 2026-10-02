@@ -1,11 +1,15 @@
 import { Request, Response } from "express";
 import { FirmTask } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getTasks = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { status, priority, assignee, search } = req.query;
-    const filter: Record<string, unknown> = {};
+
+    // firmId is set first and never overwritten by a query parameter.
+    const filter: Record<string, unknown> = { firmId };
 
     if (status && status !== "all") filter.status = status;
     if (priority && priority !== "all") filter.priority = priority;
@@ -13,14 +17,16 @@ export const getTasks = async (req: Request, res: Response): Promise<void> => {
     if (search) filter.title = { $regex: String(search), $options: "i" };
 
     const tasks = await FirmTask.find(filter).sort({ dueDate: 1 });
-    const counts = {
-      total: await FirmTask.countDocuments(),
-      overdue: await FirmTask.countDocuments({ status: "overdue" }),
-      inProgress: await FirmTask.countDocuments({ status: "in_progress" }),
-      aiTasks: await FirmTask.countDocuments({ aiCreated: true }),
-    };
 
-    sendSuccess(res, { tasks, counts }, "Tasks retrieved");
+    // Counts describe this firm, so they carry the same scope as the list.
+    const [total, overdue, inProgress, aiTasks] = await Promise.all([
+      FirmTask.countDocuments({ firmId }),
+      FirmTask.countDocuments({ firmId, status: "overdue" }),
+      FirmTask.countDocuments({ firmId, status: "in_progress" }),
+      FirmTask.countDocuments({ firmId, aiCreated: true }),
+    ]);
+
+    sendSuccess(res, { tasks, counts: { total, overdue, inProgress, aiTasks } }, "Tasks retrieved");
   } catch (error) {
     sendBadRequest(res, "Failed to retrieve tasks", error);
   }
@@ -28,7 +34,10 @@ export const getTasks = async (req: Request, res: Response): Promise<void> => {
 
 export const createTask = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { firmId, title, matterId, matterName, dueDate, assignee, priority } = req.body;
+    // The firm comes from the verified token, never from the body — a caller
+    // must not be able to create a task inside someone else's firm.
+    const firmId = firmIdOf(req);
+    const { title, matterId, matterName, dueDate, assignee, priority } = req.body;
 
     if (!title || !matterName) {
       sendBadRequest(res, "Task title and matter name are required");
@@ -55,10 +64,12 @@ export const createTask = async (req: Request, res: Response): Promise<void> => 
 
 export const updateTaskStatus = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { status, priority, assignee } = req.body;
 
-    const task = await FirmTask.findById(id);
+    // Scoped lookup: finding by id alone would let one firm edit another's work.
+    const task = await FirmTask.findOne({ _id: id, firmId });
     if (!task) {
       sendNotFound(res, "Task not found");
       return;

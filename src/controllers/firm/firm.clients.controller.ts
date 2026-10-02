@@ -2,11 +2,13 @@ import { Request, Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
 import { Client, Matter, FirmDocument } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getClients = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { status, practiceArea, search } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (status && status !== "all") filter.status = status;
     if (practiceArea && practiceArea !== "all") filter.practiceArea = practiceArea;
@@ -14,11 +16,11 @@ export const getClients = async (req: Request, res: Response): Promise<void> => 
 
     const clients = await Client.find(filter).sort({ updatedAt: -1 });
     const counts = {
-      all: await Client.countDocuments(),
-      leads: await Client.countDocuments({ status: "lead" }),
-      active: await Client.countDocuments({ status: "active" }),
-      at_risk: await Client.countDocuments({ status: "at_risk" }),
-      archived: await Client.countDocuments({ status: "archived" }),
+      all: await Client.countDocuments({ firmId }),
+      leads: await Client.countDocuments({ firmId, status: "lead" }),
+      active: await Client.countDocuments({ firmId, status: "active" }),
+      at_risk: await Client.countDocuments({ firmId, status: "at_risk" }),
+      archived: await Client.countDocuments({ firmId, status: "archived" }),
     };
 
     sendSuccess(res, { clients, counts }, "Clients retrieved");
@@ -29,8 +31,9 @@ export const getClients = async (req: Request, res: Response): Promise<void> => 
 
 export const getClientById = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
-    const client = await Client.findById(id);
+    const client = await Client.findOne({ _id: id, firmId });
     if (!client) {
       sendNotFound(res, "Client not found");
       return;
@@ -44,8 +47,9 @@ export const getClientById = async (req: Request, res: Response): Promise<void> 
 
 export const getClientIntake = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
-    const client = await Client.findById(id);
+    const client = await Client.findOne({ _id: id, firmId });
     if (!client) {
       sendNotFound(res, "Client not found");
       return;
@@ -73,10 +77,11 @@ export const getClientIntake = async (req: Request, res: Response): Promise<void
 
 export const acceptClientIntake = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { matterName, practiceArea, assignedLawyer } = req.body;
 
-    const client = await Client.findById(id);
+    const client = await Client.findOne({ _id: id, firmId });
     if (!client) {
       sendNotFound(res, "Client not found");
       return;
@@ -134,7 +139,7 @@ export const acceptClientIntake = async (req: Request, res: Response): Promise<v
  */
 export const createClient = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
-    const firmId = req.member?.firmId;
+    const firmId = firmIdOf(req);
     const { name, type, practiceArea, lawyerName, phone } = req.body as Record<string, string>;
 
     if (!name?.trim()) {

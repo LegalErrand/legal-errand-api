@@ -1,17 +1,21 @@
 import { Request, Response } from "express";
 import { Matter, FirmMember, FirmTask } from "../../models/firm";
 import { sendSuccess, sendBadRequest } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getAnalytics = async (req: Request, res: Response): Promise<void> => {
   try {
-    const totalMatters = await Matter.countDocuments();
+    const firmId = firmIdOf(req);
+
+    const totalMatters = await Matter.countDocuments({ firmId });
     const atRiskMatters = await Matter.find({
+      firmId,
       health: { $in: ["at_risk", "blocked", "awaiting_client"] },
     })
       .limit(3)
       .select("name lawyerName health stage stageProgress");
 
-    const feeEarners = await FirmMember.find().select("name role utilisation onTimeRate");
+    const feeEarners = await FirmMember.find({ firmId }).select("name role utilisation onTimeRate");
 
     const practiceBreakdown = [
       { area: "Corporate & Commercial", amount: 11400000, percentage: 46 },
@@ -27,7 +31,7 @@ export const getAnalytics = async (req: Request, res: Response): Promise<void> =
           revenueCollected: 24850000,
           billableHours: 412.5,
           activeMatters: totalMatters || 38,
-          overdueTasks: await FirmTask.countDocuments({ status: "overdue" }),
+          overdueTasks: await FirmTask.countDocuments({ firmId, status: "overdue" }),
           avgClientResponseHours: 1.4,
         },
         practiceBreakdown,

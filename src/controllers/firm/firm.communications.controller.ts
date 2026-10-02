@@ -2,11 +2,13 @@ import { Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
 import { FirmMessage } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getMessages = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { channel, matterId } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (channel && channel !== "all") filter.channel = channel;
     if (matterId) filter.matterId = matterId;
