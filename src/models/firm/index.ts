@@ -35,3 +35,11 @@ export * from "./BuiltInTemplateBody";
 export * from "./DocumentVersion";
 export * from "./DocumentComment";
 export * from "./ClientInvoice";
+export * from "./OfficeRegisterEntry";
+export * from "./FirmOfficeAccount";
+// LE-046 — interns and placements.
+export * from "./InternPlacement";
+export * from "./InternLogbookEntry";
+export * from "./InternLearningGoal";
+export * from "./InternSitting";
+export * from "./InternFeedback";

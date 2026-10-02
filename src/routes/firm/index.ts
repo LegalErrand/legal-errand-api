@@ -18,6 +18,9 @@ import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
 import * as docsEditorCtrl from "../../controllers/firm/firm.docsEditor.controller";
 import * as clientInvoiceCtrl from "../../controllers/firm/firm.clientInvoices.controller";
+import bulkMoveRoutes from "./bulkMove.routes";
+import officeAdminRoutes from "./officeAdmin.routes";
+import placementRoutes from "./placement.routes";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
@@ -192,6 +195,15 @@ router.get("/settings/escalation", settCtrl.getEscalationRules);
 router.use(intakeRoutes);
 router.use(integrationsRoutes);
 router.use("/evidence", evidenceRoutes);
+// Bulk select and move (LE-024). A move is a recorded act: the reason is
+// required and lands in both the source and destination activity logs.
+router.use("/bulk-move", bulkMoveRoutes);
+// The office manager's registers (LE-011). Admin-gated server-side, and it
+// cannot reach matter content — that is the point of the screen.
+router.use("/office-admin", officeAdminRoutes);
+// My placement (LE-046). Scoped to the caller: a placement and its logbook
+// are always their own.
+router.use("/placement", placementRoutes);
 router.use("/", templatesRoutes);
 // The built-in bodies, shared by every firm.
 router.get("/templates/bodies", getTemplateBodiesForFirm);

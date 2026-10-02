@@ -42,6 +42,7 @@ const FirmInvitationSchema = new Schema<IFirmInvitation>(
         "senior_associate",
         "associate",
         "junior_associate",
+        "intern",
         "paralegal",
         "admin",
       ],

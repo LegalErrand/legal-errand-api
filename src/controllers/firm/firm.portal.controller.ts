@@ -21,6 +21,7 @@ import { signPortalToken, PORTAL_TOKEN_TTL_SECONDS } from "../../middleware/port
 import { deepseekService } from "../../services/ai/deepseek.service";
 import { env } from "../../config/env";
 import { firmIdOf } from "../../utils/tenancy";
+import { blockedFromExternalSend, EXTERNAL_SEND_REFUSAL } from "../../utils/internalOnly";
 import {
   sendSuccess,
   sendCreated,
@@ -857,6 +858,13 @@ export const createClientPortalLink = async (req: Request, res: Response): Promi
   try {
     const firmId = firmIdOf(req);
     const id = String(req.params.id ?? "");
+
+    // LE-046: minting a portal link puts the firm's papers in front of a
+    // client, which an intern may never do.
+    if (blockedFromExternalSend(req)) {
+      sendForbidden(res, EXTERNAL_SEND_REFUSAL);
+      return;
+    }
 
     if (!Types.ObjectId.isValid(id)) {
       sendBadRequest(res, "A valid client id is required");

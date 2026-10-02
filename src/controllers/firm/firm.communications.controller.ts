@@ -1,8 +1,13 @@
 import { Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
 import { FirmMessage } from "../../models/firm";
-import { sendSuccess, sendCreated, sendBadRequest } from "../../utils/response";
+import { sendSuccess, sendCreated, sendBadRequest, sendForbidden } from "../../utils/response";
 import { firmIdOf } from "../../utils/tenancy";
+import {
+  blockedFromExternalSend,
+  INTERNAL_CHANNEL,
+  EXTERNAL_SEND_REFUSAL,
+} from "../../utils/internalOnly";
 
 export const getMessages = async (req: FirmAuthRequest, res: Response): Promise<void> => {
   try {
@@ -27,6 +32,15 @@ export const sendMessage = async (req: FirmAuthRequest, res: Response): Promise<
 
     if (!text || !recipient) {
       sendBadRequest(res, "Recipient and message text are required");
+      return;
+    }
+
+    // LE-046: an intern may only ever write inside the firm. Checked on the
+    // role in the verified token, so hiding the WhatsApp and email tabs is the
+    // presentation of this rule, not the rule itself.
+    const outbound = (channel || "whatsapp") !== INTERNAL_CHANNEL;
+    if (outbound && blockedFromExternalSend(req)) {
+      sendForbidden(res, EXTERNAL_SEND_REFUSAL);
       return;
     }
 

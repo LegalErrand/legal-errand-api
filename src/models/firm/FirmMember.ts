@@ -8,6 +8,7 @@ export type FirmRole =
   | "senior_associate"
   | "associate"
   | "junior_associate"
+  | "intern"
   | "paralegal"
   | "admin";
 
@@ -93,6 +94,7 @@ const FirmMemberSchema = new Schema<IFirmMember>(
         "senior_associate",
         "associate",
         "junior_associate",
+        "intern",
         "paralegal",
         "admin",
       ],
