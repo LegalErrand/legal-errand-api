@@ -35,7 +35,7 @@ export interface IFirmTodo extends Document {
   text: string;
   done: boolean;
   /** YYYY-MM-DD */
-  date: string;
+  date?: string;
   /** HH:MM */
   startTime?: string;
   endTime?: string;
@@ -61,7 +61,7 @@ const FirmTodoSchema = new Schema<IFirmTodo>(
     ownerId: { type: Schema.Types.ObjectId, ref: "FirmMember", required: true, index: true },
     text: { type: String, required: true, trim: true },
     done: { type: Boolean, default: false },
-    date: { type: String, required: true },
+    date: { type: String },
     startTime: { type: String },
     endTime: { type: String },
     repeat: { type: String, enum: TODO_REPEATS, default: "none" },
