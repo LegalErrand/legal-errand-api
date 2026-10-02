@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import { Firm, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
 import { emailService } from "../../services/email/email.service";
 import { env } from "../../config/env";
+import { logger } from "../../utils/logger";
 import { FirmAuthRequest } from "../../types/firm";
 import {
   sendSuccess,
@@ -215,6 +216,7 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       }
     );
     await emailService.sendFirmLoginOtp(member.email, code);
+    devRevealCode("login code", member.email, code);
 
     sendSuccess(
       res,
@@ -276,6 +278,21 @@ const sha256 = (value: string): string => crypto.createHash("sha256").update(val
 
 /** Six digits, uniformly distributed — Math.random is not used for secrets. */
 const generateCode = (): string => String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+
+/**
+ * Prints a one-time code to the server log so a developer can finish a login
+ * locally without an inbox.
+ *
+ * Gated on NODE_ENV === "development" exactly, not on `!== "production"`, so a
+ * staging deployment never prints one. The code is still hashed and emailed
+ * normally — this only mirrors it to the console.
+ */
+const devRevealCode = (label: string, recipient: string, code: string): void => {
+  if (env.NODE_ENV !== "development") return;
+  logger.warn(
+    `[dev] ${label} for ${recipient}: ${code} — development only, never printed elsewhere`
+  );
+};
 
 const isEmail = (value: string): boolean => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(value.trim());
 
@@ -347,6 +364,7 @@ async function issueSignupCode(signup: IFirmSignup): Promise<string> {
   signup.codeAttempts = 0;
   signup.lastCodeSentAt = new Date();
   await signup.save();
+  devRevealCode("signup code", signup.email, code);
   return code;
 }
 
@@ -769,6 +787,7 @@ export const resendLoginOtp = async (req: Request, res: Response): Promise<void>
       }
     );
     await emailService.sendFirmLoginOtp(member.email, code);
+    devRevealCode("login code", member.email, code);
 
     sendSuccess(res, { retryAfterSeconds: 60 }, "Verification code sent");
   } catch (error) {
