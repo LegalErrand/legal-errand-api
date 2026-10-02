@@ -49,6 +49,7 @@ const envSchema = z.object({
 
   // Google Sign-In (GIS). Optional — /auth/google returns 503 when unset.
   GOOGLE_CLIENT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

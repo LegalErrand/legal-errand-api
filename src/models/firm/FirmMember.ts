@@ -31,6 +31,8 @@ export interface IFirmMember extends Document {
   isActive: boolean;
   /** Selected only when explicitly requested — never returned by default. */
   password?: string;
+  googleId?: string;
+  microsoftId?: string;
   lastLogin?: Date;
   /** Set once the member has proved they control the address. */
   emailVerifiedAt?: Date;
@@ -112,6 +114,10 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     },
     isActive: { type: Boolean, default: true },
     password: { type: String, select: false, minlength: 8 },
+    // Set the first time this person signs in with that provider, linking the
+    // identity to the account they already had.
+    googleId: { type: String, select: false, sparse: true, index: true },
+    microsoftId: { type: String, select: false, sparse: true, index: true },
     lastLogin: { type: Date },
     emailVerifiedAt: { type: Date },
     passwordResetTokenHash: { type: String, select: false, index: true },

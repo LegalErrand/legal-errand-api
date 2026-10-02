@@ -29,6 +29,13 @@ export interface IFirm extends Document {
    * screens read.
    */
   subscriptionPlan: FirmPlan;
+  /**
+   * When set, staff of this firm sign in through the provider only and the
+   * password field is hidden. Enforced server-side as well as on screen —
+   * hiding a field is not a control.
+   */
+  requiresSso: boolean;
+  ssoProvider?: "google" | "microsoft";
   feeEarnerCapacity: number;
   aiAutonomy: {
     intakeExtraction: "auto" | "review" | "partner";
@@ -63,6 +70,8 @@ const FirmSchema = new Schema<IFirm>(
       enum: FIRM_PLANS,
       default: "starter",
     },
+    requiresSso: { type: Boolean, default: false },
+    ssoProvider: { type: String, enum: ["google", "microsoft"] },
     feeEarnerCapacity: { type: Number, default: 10 },
     aiAutonomy: {
       intakeExtraction: { type: String, enum: ["auto", "review", "partner"], default: "auto" },

@@ -23,6 +23,18 @@ function signFirmToken(memberId: string, firmId: string, email: string, role: st
   });
 }
 
+/**
+ * The session a verified member gets, however they proved who they are —
+ * password plus emailed code, a magic link, or SSO. Exported so the SSO
+ * controller issues exactly the same token rather than its own near-copy.
+ */
+export function signFirmSession(
+  member: { _id: unknown; email: string; role: string },
+  firm: { _id: unknown }
+): string {
+  return signFirmToken(String(member._id), String(firm._id), member.email, member.role);
+}
+
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
