@@ -15,6 +15,12 @@ import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
+import intakePublicRoutes from "./intake-public.routes";
+import intakeRoutes from "./intake.routes";
+import integrationsRoutes from "./integrations.routes";
+import evidenceRoutes from "./evidence.routes";
+import templatesRoutes from "./templates.routes";
+import portalRouter, { portalLinkRouter } from "./portal.routes";
 import { authenticateFirm } from "../../middleware/firmAuth.middleware";
 import { authIpRateLimit } from "../../middleware/rateLimit.middleware";
 
@@ -49,6 +55,16 @@ router.post("/auth/magic-link/verify", authIpRateLimit, authCtrl.verifyMagicLink
 // holding the link has no account yet.
 router.get("/invitations/:token", authIpRateLimit, inviteCtrl.getInvitation);
 router.post("/invitations/:token/accept", authIpRateLimit, inviteCtrl.acceptInvitation);
+
+// The public intake form (LE-016). A prospective client has no account, so
+// these must sit above the firm gate. They are IP rate limited inside.
+router.use(intakePublicRoutes);
+
+// Client portal (LE-035/036). It carries its own portal-scope auth — a firm
+// token must never open these, and a portal token must never open firm routes.
+router.use("/portal", portalRouter);
+// Firm-authenticated, but applies authenticateFirm itself so it can sit here.
+router.use(portalLinkRouter);
 
 // Everything below requires a valid firm token.
 router.use(authenticateFirm);
@@ -134,5 +150,11 @@ router.post("/ai/chat", aiCtrl.askAssistant);
 router.get("/settings", settCtrl.getFirmSettings);
 router.patch("/settings/autonomy", settCtrl.updateAIAutonomy);
 router.get("/settings/escalation", settCtrl.getEscalationRules);
+
+// ─── Intake form, integrations, evidence, templates and signatures ───────────
+router.use(intakeRoutes);
+router.use(integrationsRoutes);
+router.use("/evidence", evidenceRoutes);
+router.use("/", templatesRoutes);
 
 export default router;

@@ -27,3 +27,7 @@ export * from "./PortalRequest";
 export * from "./PortalMessage";
 export * from "./PortalBooking";
 export * from "./Integration";
+export * from "./EvidenceItem";
+export * from "./EvidenceRequest";
+export * from "./FirmTemplate";
+export * from "./Signature";
