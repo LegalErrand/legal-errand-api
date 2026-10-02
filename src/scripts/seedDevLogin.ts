@@ -14,7 +14,6 @@
  */
 import "dotenv/config";
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import { env } from "../config/env";
 import { Firm, FirmMember } from "../models/firm";
 
@@ -45,12 +44,12 @@ async function run(): Promise<void> {
     console.log(`Gave ${firm.name} the slug "oladipupo-co"`);
   }
 
-  const passwordHash = await bcrypt.hash(PASSWORD, Number(env.BCRYPT_SALT_ROUNDS));
-
+  // The model hashes on save, so the plain password goes in — hashing it here
+  // too would store a hash of a hash and no login would ever match.
   const existing = await FirmMember.findOne({ email: EMAIL });
   if (existing) {
     existing.set({
-      password: passwordHash,
+      password: PASSWORD,
       isActive: true,
       firmId: firm._id,
       role: ROLE,
@@ -65,7 +64,7 @@ async function run(): Promise<void> {
       name: "Dev Partner",
       initials: "DP",
       email: EMAIL,
-      password: passwordHash,
+      password: PASSWORD,
       role: ROLE,
       isActive: true,
     });
