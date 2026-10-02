@@ -84,6 +84,7 @@ router.use(portalLinkRouter);
 router.use(authenticateFirm);
 
 router.get("/auth/me", authCtrl.getCurrentMember);
+router.get("/auth/me/activity", authCtrl.getMyActivity);
 
 router.post("/invitations", inviteCtrl.sendInvitations);
 
