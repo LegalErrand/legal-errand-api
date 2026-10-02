@@ -14,6 +14,7 @@ import * as analCtrl from "../../controllers/firm/firm.analytics.controller";
 import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
+import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import { authenticateFirm } from "../../middleware/firmAuth.middleware";
 import { authIpRateLimit } from "../../middleware/rateLimit.middleware";
 
@@ -88,6 +89,17 @@ router.post("/documents/:id/chat", docCtrl.reviewAndChat);
 router.get("/tasks", taskCtrl.getTasks);
 router.post("/tasks", taskCtrl.createTask);
 router.patch("/tasks/:id/status", taskCtrl.updateTaskStatus);
+
+// ─── To-dos (LE-021) ─────────────────────────────────────────────────────────
+// Private to the person who owns them; the controller scopes every query to
+// both the firm and the caller, so there is no route that reads another
+// member's list.
+router.get("/todos", todoCtrl.getTodos);
+router.post("/todos", todoCtrl.createTodo);
+router.patch("/todos/:id", todoCtrl.updateTodo);
+router.delete("/todos/:id", todoCtrl.deleteTodo);
+router.post("/todos/:id/complete", todoCtrl.completeTodo);
+router.post("/todos/:id/delegate", todoCtrl.delegateTodo);
 
 // ─── Review Queue ────────────────────────────────────────────────────────────
 router.get("/reviews", reviewCtrl.getReviewQueue);
