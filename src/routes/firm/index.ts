@@ -17,6 +17,7 @@ import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
 import * as docsEditorCtrl from "../../controllers/firm/firm.docsEditor.controller";
+import * as clientInvoiceCtrl from "../../controllers/firm/firm.clientInvoices.controller";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
@@ -161,6 +162,15 @@ router.post("/communications/send", commCtrl.sendMessage);
 router.get("/billing/entries", billCtrl.getTimeEntries);
 router.patch("/billing/entries/:id/approve", billCtrl.approveTimeEntry);
 router.post("/billing/invoices", billCtrl.generateInvoice);
+
+// Client invoices (LE-023) — what the firm bills its own clients, as opposed
+// to the subscription LegalErrand bills the firm.
+router.get("/billing/client-invoices", clientInvoiceCtrl.listClientInvoices);
+router.post("/billing/client-invoices", clientInvoiceCtrl.createClientInvoice);
+router.post("/billing/client-invoices/:id/send", clientInvoiceCtrl.sendClientInvoice);
+router.post("/billing/client-invoices/:id/write-off", clientInvoiceCtrl.writeOffClientInvoice);
+router.post("/billing/client-invoices/:id/payments", clientInvoiceCtrl.recordPayment);
+router.get("/billing/payments", clientInvoiceCtrl.listPayments);
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 router.get("/analytics", analCtrl.getAnalytics);

@@ -34,3 +34,4 @@ export * from "./Signature";
 export * from "./BuiltInTemplateBody";
 export * from "./DocumentVersion";
 export * from "./DocumentComment";
+export * from "./ClientInvoice";
