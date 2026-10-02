@@ -102,6 +102,7 @@ router.post("/clients", clientCtrl.createClient);
 router.get("/clients/intake/:id", clientCtrl.getClientIntake);
 router.post("/clients/intake/:id/accept", clientCtrl.acceptClientIntake);
 router.get("/clients/:id", clientCtrl.getClientById);
+router.patch("/clients/:id", clientCtrl.updateClient);
 
 // ─── Matters ─────────────────────────────────────────────────────────────────
 router.get("/matters", matterCtrl.getMatters);
@@ -120,7 +121,7 @@ router.post("/documents/:id/chat", docCtrl.reviewAndChat);
 // the old content as a new version rather than rolling back.
 router.get("/documents/:id/editor", docsEditorCtrl.getEditorDocument);
 router.patch("/documents/:id/content", docsEditorCtrl.saveEditorContent);
-router.post("/documents/:id/rename", docsEditorCtrl.renameEditorDocument);
+router.patch("/documents/:id/rename", docsEditorCtrl.renameEditorDocument);
 router.post("/documents/:id/copy", docsEditorCtrl.copyEditorDocument);
 router.get("/documents/:id/versions", docsEditorCtrl.listVersions);
 router.post("/documents/:id/versions", docsEditorCtrl.createVersion);
@@ -129,7 +130,7 @@ router.post("/documents/:id/versions/:versionId/restore", docsEditorCtrl.restore
 router.get("/documents/:id/comments", docsEditorCtrl.listComments);
 router.post("/documents/:id/comments", docsEditorCtrl.createComment);
 router.post("/documents/:id/comments/:commentId/replies", docsEditorCtrl.replyToComment);
-router.post("/documents/:id/comments/:commentId/resolve", docsEditorCtrl.resolveComment);
+router.patch("/documents/:id/comments/:commentId/resolve", docsEditorCtrl.resolveComment);
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 router.get("/tasks", taskCtrl.getTasks);
