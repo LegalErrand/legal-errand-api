@@ -1,11 +1,13 @@
 import { Request, Response } from "express";
 import { FirmTimeEntry, Matter } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
+import { firmIdOf } from "../../utils/tenancy";
 
 export const getTimeEntries = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { matterId, billable, approved } = req.query;
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { firmId };
 
     if (matterId) filter.matterId = matterId;
     if (billable !== undefined) filter.billable = billable === "true";
@@ -38,10 +40,11 @@ export const getTimeEntries = async (req: Request, res: Response): Promise<void>
 
 export const approveTimeEntry = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { id } = req.params;
     const { billable, duration } = req.body;
 
-    const entry = await FirmTimeEntry.findById(id);
+    const entry = await FirmTimeEntry.findOne({ _id: id, firmId });
     if (!entry) {
       sendNotFound(res, "Time entry not found");
       return;
@@ -60,12 +63,13 @@ export const approveTimeEntry = async (req: Request, res: Response): Promise<voi
 
 export const generateInvoice = async (req: Request, res: Response): Promise<void> => {
   try {
+    const firmId = firmIdOf(req);
     const { matterId, clientName, discount } = req.body;
 
-    const matter = matterId ? await Matter.findById(matterId) : null;
+    const matter = matterId ? await Matter.findOne({ _id: matterId, firmId }) : null;
     const entries = matterId
-      ? await FirmTimeEntry.find({ matterId, billable: true })
-      : await FirmTimeEntry.find({ billable: true }).limit(5);
+      ? await FirmTimeEntry.find({ firmId, matterId, billable: true })
+      : await FirmTimeEntry.find({ firmId, billable: true }).limit(5);
 
     const subtotal = entries.reduce((sum, e) => sum + e.duration * (e.rate || 50000), 0);
     const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
