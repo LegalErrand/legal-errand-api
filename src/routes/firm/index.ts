@@ -11,6 +11,7 @@ import * as calCtrl from "../../controllers/firm/firm.calendar.controller";
 import * as commCtrl from "../../controllers/firm/firm.communications.controller";
 import * as billCtrl from "../../controllers/firm/firm.billing.controller";
 import * as analCtrl from "../../controllers/firm/firm.analytics.controller";
+import * as membersCtrl from "../../controllers/firm/firm.members.controller";
 import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
@@ -204,6 +205,11 @@ router.get("/analytics", analCtrl.getAnalytics);
 // ─── Team & Supervision ──────────────────────────────────────────────────────
 router.get("/team", teamCtrl.getTeamSupervision);
 router.post("/team/cover", teamCtrl.activateHandoverCover);
+// Editing a member, and the partner side of an intern's placement (LE-042,
+// LE-046). The controller checks the caller's role and firm on every one.
+router.get("/team/members/:id/placement", membersCtrl.getMemberPlacement);
+router.put("/team/members/:id/placement", membersCtrl.upsertPlacement);
+router.patch("/team/members/:id", membersCtrl.updateMember);
 
 // ─── AI Assistant ────────────────────────────────────────────────────────────
 router.post("/ai/chat", aiCtrl.askAssistant);
