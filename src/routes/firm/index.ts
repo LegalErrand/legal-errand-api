@@ -27,6 +27,7 @@ import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
 import integrationsRoutes from "./integrations.routes";
+import paymentsRoutes from "./payments.routes";
 import evidenceRoutes from "./evidence.routes";
 import templatesRoutes from "./templates.routes";
 import portalRouter, { portalLinkRouter } from "./portal.routes";
@@ -223,6 +224,9 @@ router.get("/settings/escalation", settCtrl.getEscalationRules);
 // ─── Intake form, integrations, evidence, templates and signatures ───────────
 router.use(intakeRoutes);
 router.use(integrationsRoutes);
+
+// Payment gateway setup (Paystack, Flutterwave). Configuration only.
+router.use(paymentsRoutes);
 router.use("/evidence", evidenceRoutes);
 // Bulk select and move (LE-024). A move is a recorded act: the reason is
 // required and lands in both the source and destination activity logs.
