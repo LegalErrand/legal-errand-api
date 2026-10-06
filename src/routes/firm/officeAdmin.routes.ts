@@ -20,6 +20,7 @@ router.get("/overview", officeAdminCtrl.getOverview);
 router.get("/finance", officeAdminCtrl.getFinance);
 router.get("/hr", officeAdminCtrl.getHr);
 router.get("/operations", officeAdminCtrl.getOperations);
+router.get("/front-desk", officeAdminCtrl.getFrontDesk);
 router.get("/technology", officeAdminCtrl.getTechnology);
 router.get("/strategy", officeAdminCtrl.getStrategy);
 
