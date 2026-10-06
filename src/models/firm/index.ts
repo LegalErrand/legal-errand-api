@@ -2,6 +2,7 @@ export * from "./Firm";
 export * from "./FirmMember";
 export * from "./FirmSignup";
 export * from "./FirmInvitation";
+export * from "./BulkMoveLedger";
 export * from "./Subscription";
 export * from "./Invoice";
 export * from "./Payment";

@@ -1,6 +1,13 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
-import { Client, FirmActivityLog, FirmDocument, Matter } from "../../models/firm";
+import {
+  BulkMoveLedger,
+  Client,
+  FirmActivityLog,
+  FirmDocument,
+  IBulkMoveLedger,
+  Matter,
+} from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
 import { firmIdOf, memberIdOf } from "../../utils/tenancy";
 
@@ -58,31 +65,12 @@ interface PreviousPlacement {
   label: string;
 }
 
-interface MoveLedgerEntry {
-  firmId: string;
-  memberId: string;
-  itemType: BulkItemType;
-  previous: PreviousPlacement[];
-  destinationLabel: string;
-  at: number;
-  undone: boolean;
-}
-
 /**
- * Ten seconds is what the acceptance criterion asks for; the entry is kept a
- * little longer so a click at the edge of the window still lands, and dropped
- * after that so nothing accumulates.
+ * Ten seconds is what the acceptance criterion asks for. The row is kept a
+ * little longer so a click at the very edge of the window still finds it and
+ * gets a clear answer rather than "not found".
  */
-const UNDO_WINDOW_MS = 60_000;
-
-const moveLedger = new Map<string, MoveLedgerEntry>();
-
-function pruneLedger(): void {
-  const cutoff = Date.now() - UNDO_WINDOW_MS;
-  for (const [id, entry] of moveLedger) {
-    if (entry.at < cutoff) moveLedger.delete(id);
-  }
-}
+const UNDO_WINDOW_MS = 10_000;
 
 const MAX_IDS_PER_MOVE = 500;
 
@@ -316,17 +304,20 @@ export const bulkMove = async (req: Request, res: Response): Promise<void> => {
       trimmedReason
     );
 
-    pruneLedger();
-    const moveId = new Types.ObjectId().toHexString();
-    moveLedger.set(moveId, {
+    // Persisted, not held in memory: an undo may land on a different instance,
+    // and a deploy between the move and the undo used to lose the way back
+    // without saying so.
+    const ledgerRow = await BulkMoveLedger.create({
       firmId,
       memberId,
       itemType,
       previous,
       destinationLabel: dest.label,
-      at: Date.now(),
       undone: false,
+      undoUntil: new Date(Date.now() + UNDO_WINDOW_MS),
+      at: new Date(),
     });
+    const moveId = String(ledgerRow._id);
 
     sendCreated(
       res,
@@ -368,11 +359,27 @@ export const undoBulkMove = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    pruneLedger();
-    const entry = moveLedger.get(moveId);
-    // Scoped the same way a database lookup would be: another firm's move id
-    // must read as not found, never as a permission error.
-    if (!entry || entry.firmId !== firmId || entry.undone) {
+    if (!isValidObjectId(moveId)) {
+      sendNotFound(res, "That move can no longer be undone");
+      return;
+    }
+
+    // Claimed in one atomic update, so two clicks on Undo cannot both reverse
+    // the same move — the second finds nothing left to claim. The firm and the
+    // member who made the move are part of the filter, so another firm's id
+    // reads as not found rather than as a permission error.
+    const entry = await BulkMoveLedger.findOneAndUpdate(
+      {
+        _id: moveId,
+        firmId,
+        memberId,
+        undone: false,
+        undoUntil: { $gt: new Date() },
+      },
+      { $set: { undone: true, undoneAt: new Date() } },
+      { new: false }
+    );
+    if (!entry) {
       sendNotFound(res, "That move can no longer be undone");
       return;
     }
@@ -383,7 +390,7 @@ export const undoBulkMove = async (req: Request, res: Response): Promise<void> =
     const restored: Array<{ id: string; fromLabel: string; fromReference?: string }> = [];
 
     if (entry.itemType === "document") {
-      const ids = entry.previous.map((p) => p.id);
+      const ids = entry.previous.map((p: IBulkMoveLedger["previous"][number]) => p.id);
       const docs = await FirmDocument.find({ _id: { $in: ids }, firmId });
       const byId = new Map(docs.map((d) => [String(d._id), d]));
 
@@ -402,7 +409,7 @@ export const undoBulkMove = async (req: Request, res: Response): Promise<void> =
         restored.push({ id: prev.id, fromLabel: entry.destinationLabel, fromReference: undefined });
       }
     } else {
-      const ids = entry.previous.map((p) => p.id);
+      const ids = entry.previous.map((p: IBulkMoveLedger["previous"][number]) => p.id);
       const matters = await Matter.find({ _id: { $in: ids }, firmId });
       const byId = new Map(matters.map((m) => [String(m._id), m]));
 
@@ -421,7 +428,9 @@ export const undoBulkMove = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    const byIdPrevious = new Map(entry.previous.map((p) => [p.id, p]));
+    const byIdPrevious = new Map(
+      entry.previous.map((p: IBulkMoveLedger["previous"][number]) => [p.id, p])
+    );
     for (const item of restored) {
       const prev = byIdPrevious.get(item.id);
       await logMove(
@@ -433,8 +442,6 @@ export const undoBulkMove = async (req: Request, res: Response): Promise<void> =
         undoReason
       );
     }
-
-    entry.undone = true;
 
     sendSuccess(res, { moveId, restored: restored.length }, "Move undone");
   } catch (error) {
