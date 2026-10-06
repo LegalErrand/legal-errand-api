@@ -11,11 +11,18 @@ import * as calCtrl from "../../controllers/firm/firm.calendar.controller";
 import * as commCtrl from "../../controllers/firm/firm.communications.controller";
 import * as billCtrl from "../../controllers/firm/firm.billing.controller";
 import * as analCtrl from "../../controllers/firm/firm.analytics.controller";
+import * as membersCtrl from "../../controllers/firm/firm.members.controller";
 import * as teamCtrl from "../../controllers/firm/firm.team.controller";
 import * as settCtrl from "../../controllers/firm/firm.settings.controller";
 import * as aiCtrl from "../../controllers/firm/firm.ai.controller";
 import * as todoCtrl from "../../controllers/firm/firm.todos.controller";
 import * as ssoCtrl from "../../controllers/firm/firm.sso.controller";
+import * as docsEditorCtrl from "../../controllers/firm/firm.docsEditor.controller";
+import * as clauseCtrl from "../../controllers/firm/firm.clauses.controller";
+import * as clientInvoiceCtrl from "../../controllers/firm/firm.clientInvoices.controller";
+import bulkMoveRoutes from "./bulkMove.routes";
+import officeAdminRoutes from "./officeAdmin.routes";
+import placementRoutes from "./placement.routes";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import intakeRoutes from "./intake.routes";
@@ -79,6 +86,7 @@ router.use(portalLinkRouter);
 router.use(authenticateFirm);
 
 router.get("/auth/me", authCtrl.getCurrentMember);
+router.get("/auth/me/activity", authCtrl.getMyActivity);
 
 router.post("/invitations", inviteCtrl.sendInvitations);
 
@@ -97,6 +105,7 @@ router.post("/clients", clientCtrl.createClient);
 router.get("/clients/intake/:id", clientCtrl.getClientIntake);
 router.post("/clients/intake/:id/accept", clientCtrl.acceptClientIntake);
 router.get("/clients/:id", clientCtrl.getClientById);
+router.patch("/clients/:id", clientCtrl.updateClient);
 
 // ─── Matters ─────────────────────────────────────────────────────────────────
 router.get("/matters", matterCtrl.getMatters);
@@ -109,6 +118,42 @@ router.get("/documents", docCtrl.getDocuments);
 router.post("/documents/generate", docCtrl.generateDocumentDraft);
 router.get("/documents/:id/review", docCtrl.reviewAndChat);
 router.post("/documents/:id/chat", docCtrl.reviewAndChat);
+
+// ─── Docs editor (LE-026 / LE-027) ───────────────────────────────────────────
+// Nothing here overwrites: a save adds a version on top, and a restore adds
+// the old content as a new version rather than rolling back.
+router.get("/documents/:id/editor", docsEditorCtrl.getEditorDocument);
+router.patch("/documents/:id/content", docsEditorCtrl.saveEditorContent);
+router.patch("/documents/:id/rename", docsEditorCtrl.renameEditorDocument);
+router.post("/documents/:id/copy", docsEditorCtrl.copyEditorDocument);
+router.get("/documents/:id/versions", docsEditorCtrl.listVersions);
+router.post("/documents/:id/versions", docsEditorCtrl.createVersion);
+router.get("/documents/:id/versions/:versionId", docsEditorCtrl.getVersion);
+router.post("/documents/:id/versions/:versionId/restore", docsEditorCtrl.restoreVersion);
+router.get("/documents/:id/comments", docsEditorCtrl.listComments);
+router.post("/documents/:id/comments", docsEditorCtrl.createComment);
+router.post("/documents/:id/comments/:commentId/replies", docsEditorCtrl.replyToComment);
+router.patch("/documents/:id/comments/:commentId/resolve", docsEditorCtrl.resolveComment);
+
+// Attaching a matter is what makes the matter fields and the approval chain
+// resolvable, so these sit together.
+router.patch("/documents/:id/matter", docsEditorCtrl.attachMatter);
+router.get("/documents/:id/shares", docsEditorCtrl.listShares);
+router.post("/documents/:id/share", docsEditorCtrl.shareDocument);
+// Nothing a junior or the AI writes leaves the firm without a person approving
+// it; this is that handoff.
+router.post("/documents/:id/send-for-review", docsEditorCtrl.sendForReview);
+
+// LE-027 — Word export, done on the server so every caller gets the same file.
+router.post("/documents/:id/export/docx", docsEditorCtrl.exportDocx);
+
+// ─── Clause library (LE-029) ─────────────────────────────────────────────────
+// Ships empty on purpose: these are clauses that end up in filed documents, so
+// the text comes from the firm rather than from us.
+router.get("/clauses", clauseCtrl.listClauses);
+router.post("/clauses", clauseCtrl.createClause);
+router.patch("/clauses/:id", clauseCtrl.updateClause);
+router.delete("/clauses/:id", clauseCtrl.deleteClause);
 
 // ─── Tasks ───────────────────────────────────────────────────────────────────
 router.get("/tasks", taskCtrl.getTasks);
@@ -145,12 +190,26 @@ router.get("/billing/entries", billCtrl.getTimeEntries);
 router.patch("/billing/entries/:id/approve", billCtrl.approveTimeEntry);
 router.post("/billing/invoices", billCtrl.generateInvoice);
 
+// Client invoices (LE-023) — what the firm bills its own clients, as opposed
+// to the subscription LegalErrand bills the firm.
+router.get("/billing/client-invoices", clientInvoiceCtrl.listClientInvoices);
+router.post("/billing/client-invoices", clientInvoiceCtrl.createClientInvoice);
+router.post("/billing/client-invoices/:id/send", clientInvoiceCtrl.sendClientInvoice);
+router.post("/billing/client-invoices/:id/write-off", clientInvoiceCtrl.writeOffClientInvoice);
+router.post("/billing/client-invoices/:id/payments", clientInvoiceCtrl.recordPayment);
+router.get("/billing/payments", clientInvoiceCtrl.listPayments);
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 router.get("/analytics", analCtrl.getAnalytics);
 
 // ─── Team & Supervision ──────────────────────────────────────────────────────
 router.get("/team", teamCtrl.getTeamSupervision);
 router.post("/team/cover", teamCtrl.activateHandoverCover);
+// Editing a member, and the partner side of an intern's placement (LE-042,
+// LE-046). The controller checks the caller's role and firm on every one.
+router.get("/team/members/:id/placement", membersCtrl.getMemberPlacement);
+router.put("/team/members/:id/placement", membersCtrl.upsertPlacement);
+router.patch("/team/members/:id", membersCtrl.updateMember);
 
 // ─── AI Assistant ────────────────────────────────────────────────────────────
 router.post("/ai/chat", aiCtrl.askAssistant);
@@ -165,6 +224,15 @@ router.get("/settings/escalation", settCtrl.getEscalationRules);
 router.use(intakeRoutes);
 router.use(integrationsRoutes);
 router.use("/evidence", evidenceRoutes);
+// Bulk select and move (LE-024). A move is a recorded act: the reason is
+// required and lands in both the source and destination activity logs.
+router.use("/bulk-move", bulkMoveRoutes);
+// The office manager's registers (LE-011). Admin-gated server-side, and it
+// cannot reach matter content — that is the point of the screen.
+router.use("/office-admin", officeAdminRoutes);
+// My placement (LE-046). Scoped to the caller: a placement and its logbook
+// are always their own.
+router.use("/placement", placementRoutes);
 router.use("/", templatesRoutes);
 // The built-in bodies, shared by every firm.
 router.get("/templates/bodies", getTemplateBodiesForFirm);

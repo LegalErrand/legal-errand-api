@@ -64,8 +64,11 @@ export const generateDocumentDraft = async (req: Request, res: Response): Promis
     );
 
     const doc = await FirmDocument.create({
-      firmId: matter?.firmId,
-      name: `${templateType} — ${matter?.clientName || "Untitled"}.docx`,
+      // The caller's firm, not the matter's — a draft with no matter linked
+      // would otherwise be created with no firm at all and fail validation.
+      firmId,
+      // No file extension: a document is named, and the export chooses the format.
+      name: `${templateType} — ${matter?.clientName || "Untitled"}`,
       type: templateType,
       matterId: matter?._id,
       matterName: matter?.name,

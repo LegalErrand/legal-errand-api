@@ -14,12 +14,14 @@ import {
   FirmDocument,
   IMatter,
   MatterStage,
+  ClientInvoice,
 } from "../../models/firm";
 import { PortalAuthRequest, PortalTokenPayload } from "../../types/portal";
 import { signPortalToken, PORTAL_TOKEN_TTL_SECONDS } from "../../middleware/portalAuth.middleware";
 import { deepseekService } from "../../services/ai/deepseek.service";
 import { env } from "../../config/env";
 import { firmIdOf } from "../../utils/tenancy";
+import { blockedFromExternalSend, EXTERNAL_SEND_REFUSAL } from "../../utils/internalOnly";
 import {
   sendSuccess,
   sendCreated,
@@ -225,7 +227,8 @@ export const getPortalOverview = async (req: Request, res: Response): Promise<vo
         }).lean()
       : [];
 
-    const billedNaira = entries.reduce((sum, e) => sum + e.duration * (e.rate ?? 50000), 0);
+    // Only the rate is taken from time entries now — the amounts come from the
+    // client's real invoices below.
     const hourlyRate = entries[0]?.rate ?? 50000;
 
     const stageIndex = matter ? STAGE_ORDER.indexOf(matter.stage) : -1;
@@ -250,6 +253,23 @@ export const getPortalOverview = async (req: Request, res: Response): Promise<vo
           ...(stage === "Hearing" ? { youShouldAttend: true } : {}),
         }))
       : [];
+
+    // One pass over this client's sent invoices — a draft is not owed.
+    const clientInvoices = await ClientInvoice.find({
+      firmId: claims.firmId,
+      clientId: claims.clientId,
+      status: { $ne: "draft" },
+    })
+      .select("totalNaira paidNaira")
+      .lean();
+
+    const invoiceTotals = clientInvoices.reduce(
+      (acc, inv) => ({
+        outstandingNaira: acc.outstandingNaira + Math.max(0, inv.totalNaira - inv.paidNaira),
+        paidNaira: acc.paidNaira + inv.paidNaira,
+      }),
+      { outstandingNaira: 0, paidNaira: 0 }
+    );
 
     const payload: PortalOverviewDto = {
       firmName: firm?.name ?? "Your firm",
@@ -279,8 +299,11 @@ export const getPortalOverview = async (req: Request, res: Response): Promise<vo
         outstanding: r.outstanding,
       })),
       chargingBasis: `₦${hourlyRate.toLocaleString("en-NG")}/h, as set out in your engagement letter`,
-      outstandingNaira: billedNaira,
-      paidToDateNaira: 0,
+      // Real figures from the client's own invoices. These used to be derived
+      // from time entries, with paidToDate hardcoded to zero, so a client who
+      // had paid still saw the full amount owing.
+      outstandingNaira: invoiceTotals.outstandingNaira,
+      paidToDateNaira: invoiceTotals.paidNaira,
       preferredChannel: client.preferredChannel,
       email: client.email,
       phone: client.phone,
@@ -329,44 +352,35 @@ export const getPortalDocuments = async (req: Request, res: Response): Promise<v
 /* ───────────────────────────── GET /portal/invoices ─────────────────────── */
 
 /**
- * The client's own fees, one invoice per matter of theirs.
+ * The client's own invoices — the real ones the firm raised, not a figure
+ * derived from time entries.
  *
- * Built from approved, billable time on their matters. The `Invoice` model is
- * the firm's own subscription billing and is deliberately never read here.
+ * Scoped by clientId and firmId from the verified portal token. A draft is
+ * never shown: the firm has not sent it, so as far as the client is concerned
+ * it does not exist. The `Invoice` model is the firm's own subscription
+ * billing and is deliberately never read here.
  */
 export const getPortalInvoices = async (req: Request, res: Response): Promise<void> => {
   try {
     const claims = portalScopeOf(req);
-    const matters = await permittedMatters(claims);
 
-    const payload: PortalInvoiceDto[] = [];
+    const rows = await ClientInvoice.find({
+      firmId: claims.firmId,
+      clientId: claims.clientId,
+      status: { $ne: "draft" },
+    })
+      .sort({ issuedOn: -1 })
+      .lean();
 
-    for (const matter of matters) {
-      const entries = await FirmTimeEntry.find({
-        firmId: claims.firmId,
-        matterId: matter._id,
-        billable: true,
-        approved: true,
-      }).lean();
-
-      if (!entries.length) continue;
-
-      const amountNaira = entries.reduce((sum, e) => sum + e.duration * (e.rate ?? 50000), 0);
-      const issuedAt = entries.reduce<Date>(
-        (latest, e) => (e.createdAt > latest ? e.createdAt : latest),
-        entries[0].createdAt
-      );
-      const dueOn = new Date(issuedAt.getTime() + 14 * 86400000);
-
-      payload.push({
-        id: String(matter._id),
-        reference: `INV-${String(matter._id).slice(-6).toUpperCase()}`,
-        amountNaira,
-        status: dueOn.getTime() < Date.now() ? "overdue" : "outstanding",
-        issuedOn: issuedAt.toISOString(),
-        dueOn: dueOn.toISOString(),
-      });
-    }
+    const payload: PortalInvoiceDto[] = rows.map((inv) => ({
+      id: String(inv._id),
+      reference: inv.reference,
+      amountNaira: inv.totalNaira,
+      status: inv.status === "paid" ? "paid" : inv.status === "overdue" ? "overdue" : "outstanding",
+      issuedOn: inv.issuedOn?.toISOString(),
+      dueOn: inv.dueOn?.toISOString(),
+      receiptUrl: inv.status === "paid" ? `/portal/invoices/${String(inv._id)}/receipt` : undefined,
+    }));
 
     sendSuccess(res, payload, "Invoices retrieved");
   } catch (error) {
@@ -844,6 +858,13 @@ export const createClientPortalLink = async (req: Request, res: Response): Promi
   try {
     const firmId = firmIdOf(req);
     const id = String(req.params.id ?? "");
+
+    // LE-046: minting a portal link puts the firm's papers in front of a
+    // client, which an intern may never do.
+    if (blockedFromExternalSend(req)) {
+      sendForbidden(res, EXTERNAL_SEND_REFUSAL);
+      return;
+    }
 
     if (!Types.ObjectId.isValid(id)) {
       sendBadRequest(res, "A valid client id is required");

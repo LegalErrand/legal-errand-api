@@ -30,5 +30,17 @@ export * from "./Integration";
 export * from "./EvidenceItem";
 export * from "./EvidenceRequest";
 export * from "./FirmTemplate";
+export * from "./FirmClause";
 export * from "./Signature";
 export * from "./BuiltInTemplateBody";
+export * from "./DocumentVersion";
+export * from "./DocumentComment";
+export * from "./ClientInvoice";
+export * from "./OfficeRegisterEntry";
+export * from "./FirmOfficeAccount";
+// LE-046 — interns and placements.
+export * from "./InternPlacement";
+export * from "./InternLogbookEntry";
+export * from "./InternLearningGoal";
+export * from "./InternSitting";
+export * from "./InternFeedback";

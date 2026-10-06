@@ -14,24 +14,13 @@ import {
   sendNotFound,
   sendServerError,
 } from "../../utils/response";
+import { rankOf } from "../../config/firmRanks";
 
 /**
  * Seniority, highest first. An invitation may only be issued at or below the
  * inviter's own rank, so nobody can promote themselves sideways by inviting a
  * second managing partner and logging in as them.
  */
-const RANK: FirmRole[] = [
-  "managing_partner",
-  "partner",
-  "senior_associate",
-  "associate",
-  "junior_associate",
-  "paralegal",
-  "admin",
-];
-
-/** Admin sits outside the matter ladder: it is a different axis, not a rank. */
-const rankOf = (role: FirmRole): number => RANK.indexOf(role);
 
 const sha256 = (value: string): string => crypto.createHash("sha256").update(value).digest("hex");
 

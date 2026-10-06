@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { FirmAuthRequest } from "../../types/firm";
-import { Client, Matter, FirmDocument } from "../../models/firm";
+import { Client, FirmMember, Matter, FirmDocument } from "../../models/firm";
 import { sendSuccess, sendCreated, sendBadRequest, sendNotFound } from "../../utils/response";
-import { firmIdOf } from "../../utils/tenancy";
+import { firmIdOf, memberIdOf } from "../../utils/tenancy";
 
 export const getClients = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -161,5 +161,61 @@ export const createClient = async (req: FirmAuthRequest, res: Response): Promise
     sendCreated(res, client, "Client created");
   } catch (error) {
     sendBadRequest(res, "Failed to create client", error);
+  }
+};
+
+/**
+ * PATCH /firm/clients/:id — LE-014.
+ *
+ * Fields are taken from an allow-list rather than spread from the body, so a
+ * caller cannot reach firmId, status history or anything else that is not
+ * theirs to set. Records who changed it and when, since a client record is
+ * evidence of the relationship.
+ */
+export const updateClient = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const firmId = firmIdOf(req);
+    const client = await Client.findOne({ _id: String(req.params.id), firmId });
+    if (!client) {
+      sendNotFound(res, "That client is not in this firm");
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    const TEXT_FIELDS = [
+      "name",
+      "type",
+      "status",
+      "rcNumber",
+      "occupation",
+      "contactPerson",
+      "contactRole",
+      "email",
+      "phone",
+      "address",
+      "practiceArea",
+      "lawyer",
+      "preferredChannel",
+      "howFound",
+      "notes",
+      "timeZone",
+      "clientSince",
+    ] as const;
+
+    for (const field of TEXT_FIELDS) {
+      if (typeof body[field] === "string") client.set(field, body[field]);
+    }
+    if (Array.isArray(body.tags)) {
+      client.tags = (body.tags as unknown[]).filter((t): t is string => typeof t === "string");
+    }
+
+    const member = await FirmMember.findById(memberIdOf(req)).select("name").lean();
+    client.set("lastChangedBy", member?.name ?? "Someone at the firm");
+    client.set("lastChangedAt", new Date());
+    await client.save();
+
+    sendSuccess(res, { client }, "Client updated");
+  } catch (error) {
+    sendBadRequest(res, "Failed to update that client", error);
   }
 };

@@ -12,6 +12,8 @@ export interface IFirmTimeEntry extends Document {
   billable: boolean;
   source: TimeSource;
   approved: boolean;
+  /** Set once this entry is on an invoice, so it cannot be billed twice. */
+  invoiceId?: Types.ObjectId;
   rate?: number;
   feeEarnerId?: Types.ObjectId;
   feeEarnerName?: string;
@@ -34,6 +36,9 @@ const FirmTimeEntrySchema = new Schema<IFirmTimeEntry>(
       default: "manual",
     },
     approved: { type: Boolean, default: false, index: true },
+    // Stamped when the entry goes on an invoice, so the same hours cannot be
+    // billed twice. Without it in the schema Mongoose strips it on update.
+    invoiceId: { type: Schema.Types.ObjectId, ref: "ClientInvoice", index: true },
     rate: { type: Number, default: 50000 },
     feeEarnerId: { type: Schema.Types.ObjectId, ref: "FirmMember" },
     feeEarnerName: { type: String },

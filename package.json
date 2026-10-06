@@ -40,6 +40,7 @@
     "@aws-sdk/client-ses": "^3.1138.0",
     "@aws-sdk/lib-storage": "^3.1041.0",
     "@aws-sdk/s3-request-presigner": "^3.1041.0",
+    "@turbodocx/html-to-docx": "^1.23.1",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",

@@ -2,9 +2,10 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Firm, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
+import { Firm, FirmActivityLog, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
 import { emailService } from "../../services/email/email.service";
 import { env } from "../../config/env";
+import { firmIdOf, memberIdOf } from "../../utils/tenancy";
 import { logger } from "../../utils/logger";
 import { FirmAuthRequest } from "../../types/firm";
 import {
@@ -1006,5 +1007,39 @@ export const verifyMagicLink = async (req: Request, res: Response): Promise<void
     sendSuccess(res, { token: authToken, member: member.toJSON(), firm }, "Logged in");
   } catch (error) {
     sendServerError(res, "Could not sign you in with that link", error);
+  }
+};
+
+/**
+ * GET /firm/auth/me/activity — this person's own recent activity (LE-006).
+ *
+ * Scoped to the caller by memberId as well as firmId: an activity log is a
+ * security record, and nobody reads anybody else's from here. Carries the
+ * city and IP prefix already recorded, so an unfamiliar sign-in is visible
+ * to the person it happened to.
+ */
+export const getMyActivity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const firmId = firmIdOf(req);
+    const memberId = memberIdOf(req);
+
+    const rows = await FirmActivityLog.find({ firmId, memberId }).sort({ at: -1 }).limit(30).lean();
+
+    sendSuccess(
+      res,
+      rows.map((r) => ({
+        id: String(r._id),
+        type: r.type,
+        summary: r.summary,
+        reference: r.reference,
+        city: r.city,
+        ipPrefix: r.ipPrefix,
+        suspicious: Boolean(r.suspicious),
+        at: r.at,
+      })),
+      "Activity retrieved"
+    );
+  } catch (error) {
+    sendBadRequest(res, "Failed to retrieve your activity", error);
   }
 };
