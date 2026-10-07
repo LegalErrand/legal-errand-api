@@ -2,6 +2,7 @@ import { env } from "../../config/env";
 import { logger } from "../../utils/logger";
 import { isBrevoConfigured, sendBrevoMail } from "./brevo-api.service";
 import { isSesConfigured, sendSesMail } from "./ses.service";
+import { isSuppressed } from "../../models/SuppressedEmail";
 
 export type MailOptions = {
   to: string;
@@ -17,6 +18,18 @@ const isConfigured = (): boolean => isBrevoConfigured() || isSesConfigured();
 export const sendEmail = async (options: MailOptions): Promise<boolean> => {
   if (!isConfigured()) {
     logger.error("Email delivery skipped — set BREVO_API_KEY and/or AWS_SES_FROM_EMAIL env vars", {
+      to: options.to,
+      subject: options.subject,
+    });
+    return false;
+  }
+
+  // Suppressed addresses are never written to again. SES judges a sender by how
+  // much mail they send to dead mailboxes and to people who reported them, and
+  // losing sending access would take every sign-in down with it — so this check
+  // guards the channel the product's auth depends on, not just one send.
+  if (await isSuppressed(options.to)) {
+    logger.warn("Email suppressed — address previously hard-bounced or complained", {
       to: options.to,
       subject: options.subject,
     });
