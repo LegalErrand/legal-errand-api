@@ -12,17 +12,12 @@
 # Idempotent: creating a topic or subscription that already exists is a no-op.
 set -euo pipefail
 
-API_BASE="${1:-}"
+API_BASE="${1:-https://api.legalerrand.com}"
 REGION="${AWS_REGION:-ap-southeast-2}"
 DOMAIN="${SES_DOMAIN:-legalerrand.com}"
-MAIL_FROM="${SES_MAIL_FROM_DOMAIN:-mail.${DOMAIN}}"
+MAIL_FROM="${SES_MAIL_FROM_DOMAIN:-send.${DOMAIN}}"
 TOPIC_NAME="${SES_TOPIC_NAME:-ses-notifications}"
 
-if [[ -z "$API_BASE" ]]; then
-  echo "usage: $0 https://your-deployed-api" >&2
-  echo "  SNS cannot reach localhost; this must be a public HTTPS URL." >&2
-  exit 1
-fi
 if [[ "$API_BASE" != https://* ]]; then
   echo "error: the endpoint must be HTTPS — SNS will not post to plain HTTP." >&2
   exit 1
@@ -74,30 +69,41 @@ echo "     $MAIL_FROM  (stays pending until the DNS below exists)"
 cat <<EOF
 
 ────────────────────────────────────────────────────────────────────────────
-Add to the production environment:
+Add to the production environment (Railway):
 
   SES_SNS_TOPIC_ARN=$TOPIC_ARN
 
 ────────────────────────────────────────────────────────────────────────────
-DNS to add at Namecheap (dns1/dns2.registrar-servers.com):
+DNS at Namecheap. Note these are CORRECTIONS, not additions — most of the
+setup already exists and one record is simply pointed at the wrong region.
 
-  1. MAIL FROM, so the envelope domain aligns with $DOMAIN
+  1. FIX the MAIL FROM MX. $MAIL_FROM currently points at us-east-1
+     while the identities and all sending are in $REGION, which is why SES
+     reports "MAIL FROM record is not aligned".
+
        Type MX   Host ${MAIL_FROM%%.*}   Priority 10
        Value feedback-smtp.${REGION}.amazonses.com
+       (replacing feedback-smtp.us-east-1.amazonses.com)
 
-       Type TXT  Host ${MAIL_FROM%%.*}
-       Value v=spf1 include:amazonses.com ~all
+     The matching TXT on ${MAIL_FROM%%.*} is already correct; leave it.
 
-  2. REPLACE the SPF on $DOMAIN — it does not currently authorise SES:
+  2. FIX the SPF on $DOMAIN — it does not authorise SES at all today, so
+     every message SES sends currently fails SPF:
+
        Type TXT  Host @
        Value v=spf1 include:amazonses.com include:zohomail.com include:spf.efwd.registrar-servers.com ~all
 
-  3. DMARC with reporting, so failures are visible rather than silent:
+  3. ADD reporting to DMARC, so failures are visible rather than silent:
+
        Type TXT  Host _dmarc
        Value v=DMARC1; p=none; rua=mailto:dmarc@$DOMAIN; fo=1;
 
+  4. DELETE the stray record whose host is "_dmarc.$DOMAIN". Namecheap
+     appends the zone, so it actually publishes _dmarc.$DOMAIN.$DOMAIN,
+     which nothing reads. The real one is host "_dmarc" alone.
+
 Leave p=none until the reports show SES and Zoho both passing, then move to
 p=quarantine and later p=reject. Tightening before alignment is clean will
-send your own login codes to spam.
+send your own login codes to spam, and every sign-in depends on one arriving.
 ────────────────────────────────────────────────────────────────────────────
 EOF
