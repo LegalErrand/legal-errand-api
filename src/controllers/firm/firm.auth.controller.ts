@@ -41,6 +41,28 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
 
 /**
+ * How long a trusted browser skips the emailed code.
+ *
+ * Seven days, not the thirty the first draft of this used. Trusting a device
+ * means a correct password alone opens a session from that browser, and these
+ * are law firms on shared office machines — a month-long window on a reception
+ * PC is a month of anyone with the password reading privileged matters. A week
+ * removes the daily-login annoyance without leaving that hole open.
+ */
+const DEVICE_TRUST_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Roles that can never trust a device.
+ *
+ * These accounts change plans, move money and suspend people. The convenience
+ * is not worth the blast radius, so they always get the code — on login and
+ * when they ask to trust a device, which is simply refused.
+ */
+const TRUSTED_DEVICE_ROLES_EXCLUDED = ["managing_partner", "partner"];
+
+const mayTrustDevice = (role: string): boolean => !TRUSTED_DEVICE_ROLES_EXCLUDED.includes(role);
+
+/**
  * 423 with the moment the lock lifts.
  *
  * sendError carries no data field, and the screen needs the time to count
@@ -211,6 +233,35 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       // produce a session pointing at nothing.
       sendUnauthorized(res, "This account is no longer active");
       return;
+    }
+
+    // A browser the member has already trusted skips the emailed code — and
+    // only the code. The password was still required to get here, so this is
+    // knowledge plus possession rather than a password on its own.
+    //
+    // Partners are excluded whatever token they present: see
+    // TRUSTED_DEVICE_ROLES_EXCLUDED.
+    const { deviceToken } = req.body as { deviceToken?: string };
+    if (deviceToken && mayTrustDevice(member.role)) {
+      const hash = sha256(String(deviceToken));
+      const withDevices = await FirmMember.findById(member._id).select("+trustedDevices");
+      const device = (withDevices?.trustedDevices ?? []).find(
+        (d) => d.tokenHash === hash && d.expiresAt.getTime() > Date.now()
+      );
+      if (device) {
+        // Recorded so the member can tell which machine is which when they
+        // come to revoke one.
+        await FirmMember.updateOne(
+          { _id: member._id, "trustedDevices.id": device.id },
+          { $set: { "trustedDevices.$.lastUsedAt": new Date(), lastLogin: new Date() } }
+        );
+        sendSuccess(
+          res,
+          { token: signFirmSession(member, firm), member: member.toJSON(), firm },
+          "Logged in"
+        );
+        return;
+      }
     }
 
     // Correct credentials are only half of a login. The session token is issued
@@ -756,7 +807,49 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       member.role
     );
 
-    sendSuccess(res, { token, member: member.toJSON(), firm }, "Logged in");
+    // "Trust this browser", if it was asked for and the role allows it. The
+    // raw token is returned once and never stored — only its hash is kept, so
+    // a leaked database cannot be replayed as a login.
+    const { trustDevice, deviceLabel } = req.body as {
+      trustDevice?: boolean;
+      deviceLabel?: string;
+    };
+    let issuedDeviceToken: string | undefined;
+    if (trustDevice === true && mayTrustDevice(member.role)) {
+      issuedDeviceToken = crypto.randomBytes(32).toString("hex");
+      await FirmMember.updateOne(
+        { _id: member._id },
+        {
+          $push: {
+            trustedDevices: {
+              id: crypto.randomBytes(8).toString("hex"),
+              tokenHash: sha256(issuedDeviceToken),
+              label:
+                String(deviceLabel ?? "")
+                  .trim()
+                  .slice(0, 80) || undefined,
+              expiresAt: new Date(Date.now() + DEVICE_TRUST_MS),
+              createdAt: new Date(),
+            },
+          },
+        }
+      );
+    }
+
+    sendSuccess(
+      res,
+      {
+        token,
+        member: member.toJSON(),
+        firm,
+        deviceToken: issuedDeviceToken,
+        // Said plainly so the screen can explain why the tick did nothing,
+        // rather than silently ignoring a partner who asked to be remembered.
+        deviceTrustRefused: trustDevice === true && !mayTrustDevice(member.role),
+        deviceTrustDays: issuedDeviceToken ? DEVICE_TRUST_MS / 86_400_000 : undefined,
+      },
+      "Logged in"
+    );
   } catch (error) {
     sendServerError(res, "Could not verify the code", error);
   }
@@ -1041,5 +1134,98 @@ export const getMyActivity = async (req: Request, res: Response): Promise<void> 
     );
   } catch (error) {
     sendBadRequest(res, "Failed to retrieve your activity", error);
+  }
+};
+
+// ─── Trusted devices ─────────────────────────────────────────────────────────
+
+/**
+ * GET /firm/auth/devices — the browsers this member has trusted.
+ *
+ * Scoped to the caller's own account and nobody else's: the id comes from the
+ * session token, never from a parameter. Token hashes are never returned —
+ * there is nothing a client can do with one, and sending it would put a login
+ * credential's hash on the wire for no reason.
+ */
+export const listTrustedDevices = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const member = await FirmMember.findById(memberIdOf(req)).select("+trustedDevices role");
+    if (!member) {
+      sendNotFound(res, "Account not found");
+      return;
+    }
+
+    const now = Date.now();
+    const devices = (member.trustedDevices ?? [])
+      .filter((d) => d.expiresAt.getTime() > now)
+      .map((d) => ({
+        id: d.id,
+        label: d.label ?? "Unnamed browser",
+        trustedOn: d.createdAt.toISOString(),
+        lastUsedAt: d.lastUsedAt?.toISOString() ?? null,
+        expiresAt: d.expiresAt.toISOString(),
+      }))
+      .sort((a, b) => b.trustedOn.localeCompare(a.trustedOn));
+
+    sendSuccess(
+      res,
+      {
+        devices,
+        /** False for partners, so the screen can say why the option is absent. */
+        mayTrustDevices: mayTrustDevice(member.role),
+        trustDays: DEVICE_TRUST_MS / 86_400_000,
+      },
+      "Trusted devices retrieved"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not list trusted devices", error);
+  }
+};
+
+/**
+ * DELETE /firm/auth/devices/:id — stop trusting one browser.
+ *
+ * The next login from it needs the emailed code again. A firm that loses
+ * control of a machine can cut it off here without changing anyone's password.
+ */
+export const revokeTrustedDevice = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const id = String(req.params.id ?? "");
+    if (!id) {
+      sendBadRequest(res, "Which device?");
+      return;
+    }
+
+    const result = await FirmMember.updateOne(
+      { _id: memberIdOf(req) },
+      { $pull: { trustedDevices: { id } } }
+    );
+
+    if (result.modifiedCount === 0) {
+      sendNotFound(res, "That device is not on your list");
+      return;
+    }
+
+    sendSuccess(res, { id }, "That browser will need the code next time");
+  } catch (error) {
+    sendServerError(res, "Could not revoke the device", error);
+  }
+};
+
+/**
+ * DELETE /firm/auth/devices — stop trusting all of them at once.
+ *
+ * The button someone reaches for after losing a laptop, so it is deliberately
+ * one call rather than a loop over the list.
+ */
+export const revokeAllTrustedDevices = async (
+  req: FirmAuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    await FirmMember.updateOne({ _id: memberIdOf(req) }, { $set: { trustedDevices: [] } });
+    sendSuccess(res, {}, "Every browser will need the code next time");
+  } catch (error) {
+    sendServerError(res, "Could not revoke the devices", error);
   }
 };

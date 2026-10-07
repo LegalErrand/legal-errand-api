@@ -64,6 +64,27 @@ export interface IFirmMember extends Document {
   /** sha256 of the passwordless sign-in link, when one has been requested. */
   magicLinkTokenHash?: string;
   magicLinkExpiresAt?: Date;
+  /**
+   * Browsers this member has chosen to trust. While one is presented and
+   * unexpired the emailed code is skipped — that is the only thing trusting a
+   * device buys. It never skips the password.
+   *
+   * Only the hash is kept, so a leaked database cannot be replayed as a login,
+   * and the whole field is `select: false` so no ordinary read returns it.
+   *
+   * Partners and managing partners are excluded from this at the controller:
+   * the accounts that can move money and suspend people always get the code.
+   * See TRUSTED_DEVICE_ROLES_EXCLUDED in firm.auth.controller.ts.
+   */
+  trustedDevices?: Array<{
+    /** Stable id so one device can be revoked without touching the others. */
+    id: string;
+    tokenHash: string;
+    label?: string;
+    lastUsedAt?: Date;
+    expiresAt: Date;
+    createdAt: Date;
+  }>;
   /** sha256 of the one-time code emailed after a correct password. */
   loginOtpHash?: string;
   loginOtpExpiresAt?: Date;
@@ -140,6 +161,21 @@ const FirmMemberSchema = new Schema<IFirmMember>(
     lockedUntil: { type: Date, select: false },
     magicLinkTokenHash: { type: String, select: false, index: true },
     magicLinkExpiresAt: { type: Date, select: false },
+    trustedDevices: {
+      type: [
+        {
+          _id: false,
+          id: { type: String, required: true },
+          tokenHash: { type: String, required: true },
+          label: { type: String },
+          lastUsedAt: { type: Date },
+          expiresAt: { type: Date, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      select: false,
+    },
     loginOtpHash: { type: String, select: false },
     loginOtpExpiresAt: { type: Date, select: false },
     loginOtpAttempts: { type: Number, select: false, default: 0 },
