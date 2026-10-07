@@ -94,6 +94,12 @@ router.use(authenticateFirm);
 router.get("/auth/me", authCtrl.getCurrentMember);
 router.get("/auth/me/activity", authCtrl.getMyActivity);
 
+// Trusted browsers (LE-001). Authenticated, and scoped to the caller's own
+// account — the member id comes from the session, never from a parameter.
+router.get("/auth/devices", authCtrl.listTrustedDevices);
+router.delete("/auth/devices", authCtrl.revokeAllTrustedDevices);
+router.delete("/auth/devices/:id", authCtrl.revokeTrustedDevice);
+
 router.post("/invitations", inviteCtrl.sendInvitations);
 
 // Bar verification gates what leaves the firm with a lawyer's name on it,
