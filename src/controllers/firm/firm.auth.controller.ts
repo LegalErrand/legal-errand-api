@@ -287,6 +287,9 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       {
         challengeToken: signLoginChallengeToken(member._id.toString(), member.email),
         email: maskEmail(member.email),
+        // So the code screen can hide "trust this browser" from roles that are
+        // not allowed it, rather than offering a tick that is silently refused.
+        mayTrustDevice: mayTrustDevice(member.role),
       },
       "Enter the code we emailed you"
     );
