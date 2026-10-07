@@ -54,6 +54,11 @@ router.post("/auth/login/verify", authIpRateLimit, authCtrl.verifyLoginOtp);
 router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
 router.post("/auth/login/firm", authIpRateLimit, authCtrl.chooseLoginFirm);
 
+// Spotting a colleague's firm before a second one is created on the same
+// domain, and asking to be let into it. Public: the asker has no account yet.
+router.get("/auth/firm-by-domain", authIpRateLimit, authCtrl.findFirmByDomain);
+router.post("/auth/join-request", authIpRateLimit, authCtrl.requestToJoinFirm);
+
 // Single sign-on (LE-001 req. 11). Public: the person has no session yet.
 // SSO issues a session directly — no emailed code — because the identity
 // provider has already applied its own second factor and no password of ours
@@ -94,6 +99,12 @@ router.use(authenticateFirm);
 
 router.get("/auth/me", authCtrl.getCurrentMember);
 router.get("/auth/me/activity", authCtrl.getMyActivity);
+
+// The join-request queue. Authenticated and firm-scoped; acting on one is
+// limited to the roles that may issue an invitation.
+router.get("/join-requests", authCtrl.listJoinRequests);
+router.post("/join-requests/:id/approve", authCtrl.approveJoinRequest);
+router.post("/join-requests/:id/decline", authCtrl.declineJoinRequest);
 
 // Trusted browsers (LE-001). Authenticated, and scoped to the caller's own
 // account — the member id comes from the session, never from a parameter.
