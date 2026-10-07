@@ -46,6 +46,12 @@ const envSchema = z.object({
 
   // AWS SES (fallback — reuses existing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION)
   AWS_SES_FROM_EMAIL: z.string().optional(),
+  /**
+   * The SNS topic SES publishes bounces and complaints to. Optional, but when
+   * set the webhook refuses messages from any other topic — so a valid AWS
+   * signature from a stranger's topic cannot write to our suppression list.
+   */
+  SES_SNS_TOPIC_ARN: z.string().optional(),
 
   // Google Sign-In (GIS). Optional — /auth/google returns 503 when unset.
   GOOGLE_CLIENT_ID: z.string().optional(),
