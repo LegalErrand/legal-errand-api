@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as tplCtrl from "../../controllers/firm/firm.templates.controller";
+import * as signCtrl from "../../controllers/firm/firm.sign.controller";
 
 /**
  * LE-029 (templates) and LE-028 (signatures).
@@ -25,6 +26,7 @@ router.get("/signatures", tplCtrl.listMySignatures);
 router.post("/signatures", tplCtrl.saveSignature);
 router.post("/signatures/apply", tplCtrl.applySignature);
 router.post("/signatures/request", tplCtrl.requestSignature);
+router.get("/signatures/requests/:id/certificate", signCtrl.getSignatureCertificate);
 router.delete("/signatures/:id", tplCtrl.deleteSignature);
 
 export default router;

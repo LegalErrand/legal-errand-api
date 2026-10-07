@@ -25,6 +25,7 @@ import officeAdminRoutes from "./officeAdmin.routes";
 import placementRoutes from "./placement.routes";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
+import signPublicRoutes from "./sign-public.routes";
 import intakeRoutes from "./intake.routes";
 import integrationsRoutes from "./integrations.routes";
 import paymentsRoutes from "./payments.routes";
@@ -76,6 +77,10 @@ router.post("/invitations/:token/accept", authIpRateLimit, inviteCtrl.acceptInvi
 // The public intake form (LE-016). A prospective client has no account, so
 // these must sit above the firm gate. They are IP rate limited inside.
 router.use(intakePublicRoutes);
+
+// The signer's side of a signing link (LE-028). A signer holds no account, so
+// this sits above authenticateFirm and carries its own token check.
+router.use(signPublicRoutes);
 
 // Client portal (LE-035/036). It carries its own portal-scope auth — a firm
 // token must never open these, and a portal token must never open firm routes.

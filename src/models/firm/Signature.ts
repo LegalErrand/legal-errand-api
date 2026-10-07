@@ -104,6 +104,35 @@ export interface ISignatureRequest extends Document {
   status: SignatureRequestStatus;
   requestedBy: Types.ObjectId;
   requestedAt: Date;
+
+  // ── The one-time link ────────────────────────────────────────────────────
+  /**
+   * The id carried in the link's token. The token alone cannot authorise
+   * anything: it is only accepted while this id still matches a row that is
+   * `pending` and unexpired, which is what makes the link single-use and
+   * lets one link be revoked without touching the signing secret.
+   */
+  tokenId: string;
+  expiresAt: Date;
+
+  // ── The audit certificate (who, when, from where, and of what) ───────────
+  signedAt?: Date;
+  declinedAt?: Date;
+  declineReason?: string;
+  /** The signer's address as the request arrived. Evidence, so never edited. */
+  signerIp?: string;
+  signerUserAgent?: string;
+  /**
+   * SHA-256 of the document's content at the moment of signing. This is what
+   * makes the certificate mean something: it ties the signature to the exact
+   * text that was on screen, so a later edit is detectable.
+   */
+  documentHash?: string;
+  /** The title as it read when signed, since a document may be renamed. */
+  documentTitleAtSigning?: string;
+  /** Short human reference, quotable in correspondence. */
+  certificateRef?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -123,9 +152,24 @@ const signatureRequestSchema = new Schema<ISignatureRequest>(
     },
     requestedBy: { type: Schema.Types.ObjectId, ref: "FirmMember", required: true },
     requestedAt: { type: Date, required: true, default: Date.now },
+
+    tokenId: { type: String, required: true, unique: true, index: true },
+    expiresAt: { type: Date, required: true },
+
+    signedAt: { type: Date },
+    declinedAt: { type: Date },
+    declineReason: { type: String, trim: true },
+    signerIp: { type: String, trim: true },
+    signerUserAgent: { type: String, trim: true },
+    documentHash: { type: String, trim: true },
+    documentTitleAtSigning: { type: String, trim: true },
+    certificateRef: { type: String, trim: true },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+/** How long a signing link stays usable. */
+export const SIGNATURE_LINK_TTL_SECONDS = 14 * 24 * 60 * 60;
 
 export const SignatureRequest = model<ISignatureRequest>(
   "SignatureRequest",
