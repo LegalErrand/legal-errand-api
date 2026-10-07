@@ -121,6 +121,55 @@ export const emailService = {
   },
 
   /** Invitation to join a firm, at a role the inviter chose. */
+  /** LE-028 — the one-time link a signer uses to open and sign a document. */
+  async sendSignatureRequest(
+    email: string,
+    o: {
+      signerName: string;
+      firmName: string;
+      requesterName: string;
+      documentTitle: string;
+      capacity: string;
+      link: string;
+      expiresOn: string;
+    }
+  ): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: `${o.firmName} has sent you a document to sign: ${o.documentTitle}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">A document is waiting for your signature</h2>
+          <p style="color: #555; line-height: 1.5;">
+            ${escapeHtml(o.signerName)}, ${escapeHtml(o.requesterName)} of
+            ${escapeHtml(o.firmName)} has asked you to sign
+            <b>${escapeHtml(o.documentTitle)}</b> as <b>${escapeHtml(o.capacity)}</b>.
+          </p>
+          <p style="color: #555; line-height: 1.5;">
+            You can read the document in full before you sign, and you may decline instead.
+          </p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${escapeHtml(o.link)}" style="background-color: #D97706; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; display: inline-block; font-weight: 600;">
+              Open the document
+            </a>
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            This link is for you alone, can only be used once, and stops working on
+            ${escapeHtml(o.expiresOn)}. If you were not expecting it, do not use it — tell
+            ${escapeHtml(o.firmName)} instead.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Signature request sent to ${email}`);
+    } else {
+      logger.error(
+        `[EMAIL] FAILED to send signature request to ${email} — check mail provider config`
+      );
+    }
+    return ok;
+  },
+
   async sendFirmInvitation(
     email: string,
     o: { firmName: string; inviterName: string; role: string; link: string }

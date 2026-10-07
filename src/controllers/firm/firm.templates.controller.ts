@@ -11,6 +11,9 @@ import {
   SIGNATURE_KINDS,
   FirmDocument,
   Matter,
+  Firm,
+  FirmMember,
+  SIGNATURE_LINK_TTL_SECONDS,
 } from "../../models/firm";
 import {
   sendSuccess,
@@ -20,6 +23,9 @@ import {
   sendConflict,
 } from "../../utils/response";
 import { firmIdOf, memberIdOf } from "../../utils/tenancy";
+import { newSigningTokenId, signSigningToken } from "../../middleware/signingAuth.middleware";
+import { emailService } from "../../services/email/email.service";
+import { env } from "../../config/env";
 
 /**
  * LE-029 (templates) and LE-028 (signatures).
@@ -445,6 +451,12 @@ export const requestSignature = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    // The link is the signer's only credential, so it is minted here, stored
+    // by id on the row and emailed. The id is what makes it single-use: see
+    // signingAuth.middleware.ts.
+    const tokenId = newSigningTokenId();
+    const expiresAt = new Date(Date.now() + SIGNATURE_LINK_TTL_SECONDS * 1000);
+
     const created = await SignatureRequest.create({
       firmId,
       documentId,
@@ -454,9 +466,61 @@ export const requestSignature = async (req: Request, res: Response): Promise<voi
       status: "pending",
       requestedBy: memberId,
       requestedAt: new Date(),
+      tokenId,
+      expiresAt,
     });
 
-    sendCreated(res, created, "Signature requested");
+    const token = signSigningToken({
+      requestId: String(created._id),
+      firmId: String(firmId),
+      tokenId,
+    });
+    const link = `${env.FIRM_APP_URL}/sign/${token}`;
+
+    const [firm, requester] = await Promise.all([
+      Firm.findById(firmId).select("name"),
+      FirmMember.findById(memberId).select("name"),
+    ]);
+
+    // A failed send must not lose the request: the row stands, and the caller
+    // is told so it can offer the link another way.
+    const emailed = await emailService.sendSignatureRequest(email, {
+      signerName: name,
+      firmName: firm?.name ?? "The firm",
+      requesterName: requester?.name ?? "The firm",
+      documentTitle: document.name,
+      capacity,
+      link,
+      expiresOn: expiresAt.toLocaleDateString("en-NG", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+    });
+
+    sendCreated(
+      res,
+      {
+        // Spelled out rather than spread from the document: `toObject()` would
+        // also hand back `tokenId`, and would keep handing back whatever field
+        // is added to the schema next. The fields are the ones SignatureDialog
+        // already reads, so an existing caller is unaffected.
+        _id: created._id,
+        id: String(created._id),
+        documentId: String(created.documentId),
+        name: created.name,
+        capacity: created.capacity,
+        email: created.email,
+        status: created.status,
+        requestedAt: created.requestedAt.toISOString(),
+        expiresAt: created.expiresAt.toISOString(),
+        // Returned so the firm can copy it if the email bounces. It is the
+        // signer's credential, so only the firm that created it ever sees it.
+        link,
+        emailed,
+      },
+      emailed ? "Signature requested" : "Signature requested, but the email could not be sent"
+    );
   } catch (error) {
     sendBadRequest(res, "Failed to request the signature", error);
   }

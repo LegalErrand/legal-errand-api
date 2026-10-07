@@ -99,6 +99,20 @@ const startOfToday = (): Date => {
 
 const addDays = (from: Date, days: number): Date => new Date(from.getTime() + days * 86_400_000);
 
+/**
+ * The calendar date a human in this timezone would call it.
+ *
+ * Not toISOString().slice(0, 10): that is the UTC date, and the office runs on
+ * WAT. At local midnight the two disagree, so a row filed "today" would be
+ * filtered out as yesterday's.
+ */
+const localISODate = (value: Date | string): string => {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+};
+
 /** Whole days from today to `date`, negative when it has already passed. */
 function daysUntil(date?: Date | null): number | null {
   if (!date) return null;
@@ -505,6 +519,64 @@ export const getOperations = async (req: Request, res: Response): Promise<void> 
     );
   } catch (error) {
     sendBadRequest(res, "Failed to retrieve operations", error);
+  }
+};
+
+// ─── Front desk ──────────────────────────────────────────────────────────────
+
+/**
+ * The reception desk's own day: what came in, who is coming, what is being
+ * typed, what is going out, what is running low and who is in the building.
+ *
+ * Room bookings are deliberately not here. They are the same register the
+ * Operations tab already shows as "Rooms today", and one register owned by two
+ * tabs is a reconciliation problem rather than a convenience.
+ */
+export const getFrontDesk = async (req: Request, res: Response): Promise<void> => {
+  if (!assertAdmin(req, res)) return;
+  try {
+    const firmId = firmIdOf(req);
+    const todayISO = localISODate(new Date());
+
+    const registers = await entriesOfKind(firmId, [
+      "correspondence",
+      "message",
+      "visitor",
+      "typing",
+      "registry_run",
+      "supply",
+      "attendance",
+    ]);
+
+    const of = (kind: OfficeRegisterKind) => registers.filter((r) => r.kind === kind);
+    const onDay = (value?: Date | string | null) => !!value && localISODate(value) === todayISO;
+
+    sendSuccess(
+      res,
+      {
+        correspondence: of("correspondence"),
+        messages: of("message"),
+        // Expected today, plus anyone still open from an earlier day so a
+        // visitor who never arrived is not quietly dropped off the desk.
+        visitors: of("visitor").filter((v) => onDay(v.startOn) || v.status !== "done"),
+        typing: of("typing"),
+        registryRuns: of("registry_run"),
+        supplies: of("supply").map((item) => ({
+          ...item,
+          // "Low" is a quarter left or less, which is the point at which
+          // reordering still arrives before the shelf is empty.
+          low:
+            item.quantityTotal !== undefined &&
+            item.quantityTotal > 0 &&
+            item.quantityUsed !== undefined &&
+            item.quantityTotal - item.quantityUsed <= item.quantityTotal / 4,
+        })),
+        whoIsIn: of("attendance").filter((a) => onDay(a.startOn) || !a.startOn),
+      },
+      "Front desk retrieved"
+    );
+  } catch (error) {
+    sendBadRequest(res, "Failed to retrieve front desk", error);
   }
 };
 
