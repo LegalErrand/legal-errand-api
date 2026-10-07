@@ -52,6 +52,7 @@ router.post("/auth/signup/firm", authIpRateLimit, authCtrl.completeFirmSetup);
 router.post("/auth/login", authIpRateLimit, authCtrl.loginFirmMember);
 router.post("/auth/login/verify", authIpRateLimit, authCtrl.verifyLoginOtp);
 router.post("/auth/login/resend", authIpRateLimit, authCtrl.resendLoginOtp);
+router.post("/auth/login/firm", authIpRateLimit, authCtrl.chooseLoginFirm);
 
 // Single sign-on (LE-001 req. 11). Public: the person has no session yet.
 // SSO issues a session directly — no emailed code — because the identity
