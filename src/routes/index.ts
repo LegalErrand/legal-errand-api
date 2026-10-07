@@ -10,6 +10,7 @@ import waitlistRoutes from "./waitlist.routes";
 import userRoutes from "./user.routes";
 import adminRoutes from "./admin";
 import firmRoutes from "./firm";
+import sesRoutes from "./ses.routes";
 import { isRedisAvailable } from "../config/redis";
 
 const router = Router();
@@ -34,5 +35,9 @@ router.use("/waitlist", waitlistRoutes);
 router.use("/user", userRoutes);
 router.use("/admin", adminRoutes);
 router.use("/firm", firmRoutes);
+
+// SES bounce and complaint notifications from SNS. Public by necessity — SNS
+// has no credentials — and guarded by AWS signature verification instead.
+router.use("/ses", sesRoutes);
 
 export default router;
