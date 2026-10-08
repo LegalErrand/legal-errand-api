@@ -62,6 +62,18 @@ router.get("/system", getSystemHealth);
 router.get("/tickets", listTickets);
 router.patch("/tickets/:ticketId", requireFirmAdmin, resolveTicket);
 
+// ─── The 39 built-in template bodies ─────────────────────────────────────────
+// Platform-level, not firm-scoped: these are the product's own documents.
+//
+// Declared ABOVE "/:id" deliberately. Express matches in order, so with these
+// below it, GET /template-bodies was being handled by getFirm with an id of
+// "template-bodies" and answering "Firm not found" — which meant the admin
+// templates screen could never load the list of bodies we hold.
+
+router.get("/template-bodies", listTemplateBodies);
+router.put("/template-bodies/:templateId", upsertTemplateBody);
+router.delete("/template-bodies/:templateId", deleteTemplateBody);
+
 // ─── The list, and one firm ───────────────────────────────────────────────────
 
 router.get("/", listFirms);
@@ -82,11 +94,5 @@ router.patch("/:id/status", requireFirmAdmin, changeStatus);
 router.post("/:id/trial/extend", requireFirmAdmin, extendTrial);
 router.post("/:id/payment/retry", requireFirmAdmin, retryPayment);
 router.post("/:id/access-request", requireFirmAdmin, requestAccess);
-
-// The 39 built-in template bodies LegalErrand ships. Platform-level, not
-// firm-scoped — every firm reads the same documents.
-router.get("/template-bodies", listTemplateBodies);
-router.put("/template-bodies/:templateId", upsertTemplateBody);
-router.delete("/template-bodies/:templateId", deleteTemplateBody);
 
 export default router;
