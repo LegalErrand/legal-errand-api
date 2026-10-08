@@ -276,7 +276,12 @@ export const bulkUploadLibraryFiles = async (req: AdminRequest, res: Response): 
         ? [req.body.subjects]
         : [];
 
-    const results: { fileName: string; status: "success" | "error"; error?: string; docId?: string }[] = [];
+    const results: {
+      fileName: string;
+      status: "success" | "error";
+      error?: string;
+      docId?: string;
+    }[] = [];
 
     await Promise.all(
       files.map(async (file, i) => {
@@ -323,7 +328,11 @@ export const bulkUploadLibraryFiles = async (req: AdminRequest, res: Response): 
 
           const doc = await LibraryDocument.create(docData);
 
-          results[i] = { fileName: file.originalname, status: "success", docId: (doc._id as { toString(): string }).toString() };
+          results[i] = {
+            fileName: file.originalname,
+            status: "success",
+            docId: (doc._id as { toString(): string }).toString(),
+          };
         } catch (uploadErr) {
           results[i] = {
             fileName: file.originalname,

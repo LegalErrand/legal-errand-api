@@ -108,6 +108,10 @@ router.post("/join-requests/:id/decline", authCtrl.declineJoinRequest);
 
 // Trusted browsers (LE-001). Authenticated, and scoped to the caller's own
 // account — the member id comes from the session, never from a parameter.
+// Moving between firms without signing out. Scoped to the session's own email.
+router.get("/auth/my-firms", authCtrl.listMyFirms);
+router.post("/auth/switch-firm", authCtrl.switchFirm);
+
 router.get("/auth/devices", authCtrl.listTrustedDevices);
 router.delete("/auth/devices", authCtrl.revokeAllTrustedDevices);
 router.delete("/auth/devices/:id", authCtrl.revokeTrustedDevice);
