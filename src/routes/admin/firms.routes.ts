@@ -15,6 +15,8 @@ import {
   listNotes,
   addNote,
   resolveTicket,
+  getAccessRequest,
+  startAccessSession,
 } from "../../controllers/admin/firmActions.controller";
 import { getFirmInvoices, getRevenue } from "../../controllers/admin/firmBilling.controller";
 import {
@@ -82,6 +84,10 @@ router.patch("/:id/status", requireFirmAdmin, changeStatus);
 router.post("/:id/trial/extend", requireFirmAdmin, extendTrial);
 router.post("/:id/payment/retry", requireFirmAdmin, retryPayment);
 router.post("/:id/access-request", requireFirmAdmin, requestAccess);
+router.get("/:id/access-request", requireFirmAdmin, getAccessRequest);
+// Mints the read-only session an approved grant permits. Read-only is enforced
+// in authenticateFirm, not here, so no route can be added around it.
+router.post("/:id/access-session", requireFirmAdmin, startAccessSession);
 
 // The 39 built-in template bodies LegalErrand ships. Platform-level, not
 // firm-scoped — every firm reads the same documents.

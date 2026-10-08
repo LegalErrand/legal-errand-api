@@ -92,3 +92,7 @@ export async function plantLoginCode(memberId: Types.ObjectId | string, code = "
   );
   return code;
 }
+
+/** An admin session token, as the admin dashboard would hold. */
+export const adminToken = (adminId: string, role = "firm_admin", email = "ops@legalerrand.com") =>
+  jwt.sign({ adminId, email, role, isAdmin: true }, env.JWT_SECRET, { expiresIn: "1h" });

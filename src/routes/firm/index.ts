@@ -26,6 +26,7 @@ import placementRoutes from "./placement.routes";
 import { getTemplateBodiesForFirm } from "../../controllers/admin/templateBodies.controller";
 import intakePublicRoutes from "./intake-public.routes";
 import signPublicRoutes from "./sign-public.routes";
+import * as accessCtrl from "../../controllers/firm/firm.accessRequest.controller";
 import intakeRoutes from "./intake.routes";
 import integrationsRoutes from "./integrations.routes";
 import paymentsRoutes from "./payments.routes";
@@ -88,6 +89,12 @@ router.use(intakePublicRoutes);
 // this sits above authenticateFirm and carries its own token check.
 router.use(signPublicRoutes);
 
+// A firm owner answering an admin's request to look inside their workspace.
+// Public: they hold no admin account and should not have to log in to say no.
+router.get("/access-request/:token", authIpRateLimit, accessCtrl.getAccessRequest);
+router.post("/access-request/:token/approve", authIpRateLimit, accessCtrl.approveAccessRequest);
+router.post("/access-request/:token/decline", authIpRateLimit, accessCtrl.declineAccessRequest);
+
 // Client portal (LE-035/036). It carries its own portal-scope auth — a firm
 // token must never open these, and a portal token must never open firm routes.
 router.use("/portal", portalRouter);
@@ -109,6 +116,10 @@ router.post("/join-requests/:id/decline", authCtrl.declineJoinRequest);
 // Trusted browsers (LE-001). Authenticated, and scoped to the caller's own
 // account — the member id comes from the session, never from a parameter.
 // Moving between firms without signing out. Scoped to the session's own email.
+// Who has, or has asked for, access to this firm.
+router.get("/access-grants", accessCtrl.listAccessGrants);
+router.post("/access-grants/:id/revoke", accessCtrl.revokeAccessGrant);
+
 router.get("/auth/my-firms", authCtrl.listMyFirms);
 router.post("/auth/switch-firm", authCtrl.switchFirm);
 
