@@ -8,7 +8,7 @@
     "build": "npm install --include=dev && tsc",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run typecheck",
+    "validate": "npm run typecheck && npm run lint && npm run format:check",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -21,7 +21,9 @@
     "seed:firm-admin": "ts-node --transpile-only src/scripts/seedFirmAdminData.ts",
     "seed:dev-login": "ts-node --transpile-only src/scripts/seedDevLogin.ts",
     "migrate:plan-names": "ts-node --transpile-only src/scripts/migratePlanNames.ts",
-    "backfill:firm-domains": "ts-node --transpile-only src/scripts/backfillFirmDomains.ts"
+    "backfill:firm-domains": "ts-node --transpile-only src/scripts/backfillFirmDomains.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "lint-staged": {
     "src/**/*.ts": [
@@ -75,6 +77,7 @@
     "@types/multer-s3": "^3.0.3",
     "@types/node": "^25.6.0",
     "@types/nodemailer": "^8.0.0",
+    "@types/supertest": "^7.2.1",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "@types/uuid": "^10.0.0",
@@ -84,8 +87,10 @@
     "lint-staged": "^16.2.7",
     "nodemon": "^3.1.14",
     "prettier": "^3.7.4",
+    "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.48.0"
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^5.0.3"
   }
 }
