@@ -2,10 +2,19 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { Firm, FirmActivityLog, FirmMember, FirmSignup, IFirmSignup } from "../../models/firm";
+import {
+  Firm,
+  FirmActivityLog,
+  FirmJoinRequest,
+  FirmMember,
+  FirmSignup,
+  FirmInvitation,
+  IFirmSignup,
+} from "../../models/firm";
 import { emailService } from "../../services/email/email.service";
 import { env } from "../../config/env";
-import { firmIdOf, memberIdOf } from "../../utils/tenancy";
+import { isFirmRole, rankOf } from "../../config/firmRanks";
+import { firmIdOf, memberIdOf, roleOf } from "../../utils/tenancy";
 import { logger } from "../../utils/logger";
 import { FirmAuthRequest } from "../../types/firm";
 import {
@@ -16,6 +25,7 @@ import {
   sendNotFound,
   sendServerError,
   sendUnauthorized,
+  sendForbidden,
 } from "../../utils/response";
 
 function signFirmToken(memberId: string, firmId: string, email: string, role: string) {
@@ -35,6 +45,12 @@ export function signFirmSession(
 ): string {
   return signFirmToken(String(member._id), String(firm._id), member.email, member.role);
 }
+
+/** Whoever may issue an invitation may approve a request for one. */
+const JOIN_APPROVER_ROLES = ["managing_partner", "partner", "admin"];
+
+/** An invitation raised by approving a request lasts as long as any other. */
+const JOIN_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
@@ -128,6 +144,7 @@ export const onboardFirm = async (req: Request, res: Response): Promise<void> =>
       name: firmName,
       jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
       contactEmail: normalisedContact,
+      domain: normalisedContact.split("@")[1],
       address: address || "",
       aiAutonomy: {
         intakeExtraction: aiPreferences?.includes("intake") ? "auto" : "review",
@@ -174,9 +191,13 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    const member = await FirmMember.findOne({ email: email.toLowerCase() }).select(
-      "+password +failedLoginAttempts +lockedUntil"
+    // A lawyer may sit at more than one firm, so this is every membership on
+    // the address. The first is what the lockout counter and the emailed code
+    // hang off; the rest come along once the code is right.
+    const candidates = await FirmMember.find({ email: email.toLowerCase() }).select(
+      "+password +failedLoginAttempts +lockedUntil +trustedDevices"
     );
+    const member = candidates[0];
 
     // A locked account is told so, and told when it lifts. Hiding the lock
     // behind "incorrect password" just makes someone try the same password
@@ -190,8 +211,16 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    // Each membership carries its own password hash, so the ones this password
+    // opens are the ones this person may enter. A shared address with different
+    // passwords at two firms therefore opens only the one it matches.
+    const opened = [];
+    for (const c of candidates) {
+      if (await c.comparePassword(password)) opened.push(c);
+    }
+
     // Same message for unknown email and wrong password — do not reveal which.
-    if (!member || !(await member.comparePassword(password))) {
+    if (!member || opened.length === 0) {
       if (member) {
         const attempts = (member.failedLoginAttempts ?? 0) + 1;
         const update: Record<string, unknown> = { failedLoginAttempts: attempts };
@@ -235,30 +264,56 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    const memberIds = opened.map((m) => String(m._id));
+
     // A browser the member has already trusted skips the emailed code — and
     // only the code. The password was still required to get here, so this is
     // knowledge plus possession rather than a password on its own.
     //
-    // Partners are excluded whatever token they present: see
-    // TRUSTED_DEVICE_ROLES_EXCLUDED.
+    // With more than one membership this is deliberately narrow: the skip
+    // applies only to the firms where the role is allowed to trust a device.
+    // Somebody who is an associate at one firm and a partner at another gets
+    // straight into the first and is still asked for a code for the second,
+    // rather than one firm's convenience lowering the bar at the other.
     const { deviceToken } = req.body as { deviceToken?: string };
-    if (deviceToken && mayTrustDevice(member.role)) {
+    if (deviceToken) {
       const hash = sha256(String(deviceToken));
-      const withDevices = await FirmMember.findById(member._id).select("+trustedDevices");
-      const device = (withDevices?.trustedDevices ?? []).find(
-        (d) => d.tokenHash === hash && d.expiresAt.getTime() > Date.now()
+      const now = Date.now();
+      const eligible = opened.filter(
+        (m) =>
+          mayTrustDevice(m.role) &&
+          (m.trustedDevices ?? []).some((d) => d.tokenHash === hash && d.expiresAt.getTime() > now)
       );
-      if (device) {
+
+      if (eligible.length > 0) {
         // Recorded so the member can tell which machine is which when they
         // come to revoke one.
-        await FirmMember.updateOne(
-          { _id: member._id, "trustedDevices.id": device.id },
-          { $set: { "trustedDevices.$.lastUsedAt": new Date(), lastLogin: new Date() } }
+        await FirmMember.updateMany(
+          { _id: { $in: eligible.map((m) => m._id) }, "trustedDevices.tokenHash": hash },
+          { $set: { "trustedDevices.$.lastUsedAt": new Date() } }
         );
+
+        if (eligible.length === 1) {
+          const session = await issueSessionFor(String(eligible[0]._id));
+          if (!session) {
+            sendUnauthorized(res, "This account is no longer active");
+            return;
+          }
+          sendSuccess(res, session, "Logged in");
+          return;
+        }
+
         sendSuccess(
           res,
-          { token: signFirmSession(member, firm), member: member.toJSON(), firm },
-          "Logged in"
+          {
+            needsFirmChoice: true,
+            choiceToken: signFirmChoiceToken(
+              eligible.map((m) => String(m._id)),
+              member.email
+            ),
+            firms: await describeMemberships(eligible.map((m) => String(m._id))),
+          },
+          "Choose a firm"
         );
         return;
       }
@@ -285,8 +340,11 @@ export const loginFirmMember = async (req: Request, res: Response): Promise<void
     sendSuccess(
       res,
       {
-        challengeToken: signLoginChallengeToken(member._id.toString(), member.email),
+        challengeToken: signLoginChallengeToken(memberIds, String(member._id), member.email),
         email: maskEmail(member.email),
+        // So the code screen can hide "trust this browser" from roles that are
+        // not allowed it, rather than offering a tick that is silently refused.
+        mayTrustDevice: mayTrustDevice(member.role),
       },
       "Enter the code we emailed you"
     );
@@ -388,23 +446,63 @@ function readOnboardingToken(req: Request): { signupId: string; email: string } 
  * Proves a password was accepted, and nothing more. Not scope "firm", so
  * authenticateFirm rejects it and it cannot reach firm data on its own.
  */
-function signLoginChallengeToken(memberId: string, email: string): string {
-  return jwt.sign({ memberId, email, scope: "firm-login-otp" }, env.JWT_SECRET, {
+function signLoginChallengeToken(memberIds: string[], otpMemberId: string, email: string): string {
+  return jwt.sign({ memberIds, otpMemberId, email, scope: "firm-login-otp" }, env.JWT_SECRET, {
     expiresIn: "10m",
   });
 }
 
-function readLoginChallengeToken(req: Request): { memberId: string; email: string } | null {
+/**
+ * Issued once the code is right, to carry the choice of firm and nothing else.
+ *
+ * Not scope "firm", so authenticateFirm refuses it: holding one proves the
+ * password and the code were both accepted, and buys only the right to name
+ * which of those memberships to enter.
+ */
+function signFirmChoiceToken(memberIds: string[], email: string): string {
+  return jwt.sign({ memberIds, email, scope: "firm-login-choice" }, env.JWT_SECRET, {
+    expiresIn: "10m",
+  });
+}
+
+/** The firms a set of memberships belongs to, for the "choose a firm" screen. */
+async function describeMemberships(memberIds: string[]) {
+  const members = await FirmMember.find({ _id: { $in: memberIds } }).select("firmId role name");
+  const firms = await Firm.find({ _id: { $in: members.map((m) => m.firmId) } }).select("name");
+  const byId = new Map(firms.map((f) => [String(f._id), f.name]));
+  return members.map((m) => ({
+    memberId: String(m._id),
+    firmId: String(m.firmId),
+    firmName: byId.get(String(m.firmId)) ?? "A firm",
+    role: m.role,
+  }));
+}
+
+/** Issues the session for one chosen membership. */
+async function issueSessionFor(memberId: string) {
+  const member = await FirmMember.findById(memberId);
+  if (!member || !member.isActive) return null;
+  const firm = await Firm.findById(member.firmId);
+  if (!firm) return null;
+  await FirmMember.updateOne({ _id: member._id }, { $set: { lastLogin: new Date() } });
+  return { token: signFirmSession(member, firm), member: member.toJSON(), firm };
+}
+
+function readScopedToken(
+  req: Request,
+  scope: "firm-login-otp" | "firm-login-choice"
+): { memberIds: string[]; otpMemberId?: string; email: string } | null {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
   try {
     const decoded = jwt.verify(header.split(" ")[1], env.JWT_SECRET) as {
-      memberId?: string;
+      memberIds?: string[];
+      otpMemberId?: string;
       email?: string;
       scope?: string;
     };
-    if (decoded.scope !== "firm-login-otp" || !decoded.memberId || !decoded.email) return null;
-    return { memberId: decoded.memberId, email: decoded.email };
+    if (decoded.scope !== scope || !decoded.memberIds?.length || !decoded.email) return null;
+    return { memberIds: decoded.memberIds, otpMemberId: decoded.otpMemberId, email: decoded.email };
   } catch {
     return null;
   }
@@ -618,6 +716,9 @@ export const completeFirmSetup = async (req: Request, res: Response): Promise<vo
       name: String(firmName).trim(),
       jurisdiction: jurisdiction || "Nigeria (Lagos State High Court)",
       contactEmail: signup.email,
+      // Recorded so the next colleague on this domain is offered the firm
+      // rather than quietly creating a second one beside it.
+      domain: signup.email.split("@")[1],
       registrationNumber: registrationNumber ? String(registrationNumber).trim() : undefined,
       address: address ? String(address).trim() : undefined,
       feeEarnerCapacity: FEE_EARNERS_BY_SIZE[String(size ?? "")] ?? 10,
@@ -742,8 +843,8 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 /** POST /firm/auth/login/verify — exchange the emailed code for a session. */
 export const verifyLoginOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const claims = readLoginChallengeToken(req);
-    if (!claims) {
+    const claims = readScopedToken(req, "firm-login-otp");
+    if (!claims?.otpMemberId) {
       sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
       return;
     }
@@ -754,7 +855,7 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const member = await FirmMember.findById(claims.memberId).select(
+    const member = await FirmMember.findById(claims.otpMemberId).select(
       "+loginOtpHash +loginOtpExpiresAt +loginOtpAttempts"
     );
     if (!member || !member.isActive) {
@@ -800,25 +901,22 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       }
     );
 
-    const token = signFirmToken(
-      member._id.toString(),
-      member.firmId.toString(),
-      member.email,
-      member.role
-    );
-
-    // "Trust this browser", if it was asked for and the role allows it. The
-    // raw token is returned once and never stored — only its hash is kept, so
-    // a leaked database cannot be replayed as a login.
+    // "Trust this browser", if it was asked for. One token covers every
+    // membership allowed to honour it, so a second firm on the same browser is
+    // not asked again — but a membership whose role is excluded never records
+    // it, and so still gets the code.
     const { trustDevice, deviceLabel } = req.body as {
       trustDevice?: boolean;
       deviceLabel?: string;
     };
+    const trustable = await FirmMember.find({ _id: { $in: claims.memberIds } }).select("role");
+    const trustableIds = trustable.filter((m) => mayTrustDevice(m.role)).map((m) => m._id);
+
     let issuedDeviceToken: string | undefined;
-    if (trustDevice === true && mayTrustDevice(member.role)) {
+    if (trustDevice === true && trustableIds.length > 0) {
       issuedDeviceToken = crypto.randomBytes(32).toString("hex");
-      await FirmMember.updateOne(
-        { _id: member._id },
+      await FirmMember.updateMany(
+        { _id: { $in: trustableIds } },
         {
           $push: {
             trustedDevices: {
@@ -836,20 +934,38 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
       );
     }
 
-    sendSuccess(
-      res,
-      {
-        token,
-        member: member.toJSON(),
-        firm,
-        deviceToken: issuedDeviceToken,
-        // Said plainly so the screen can explain why the tick did nothing,
-        // rather than silently ignoring a partner who asked to be remembered.
-        deviceTrustRefused: trustDevice === true && !mayTrustDevice(member.role),
-        deviceTrustDays: issuedDeviceToken ? DEVICE_TRUST_MS / 86_400_000 : undefined,
-      },
-      "Logged in"
-    );
+    const common = {
+      deviceToken: issuedDeviceToken,
+      // Said plainly so the screen can explain why the tick did nothing,
+      // rather than silently ignoring a partner who asked to be remembered.
+      deviceTrustRefused: trustDevice === true && trustableIds.length === 0,
+      deviceTrustDays: issuedDeviceToken ? DEVICE_TRUST_MS / 86_400_000 : undefined,
+    };
+
+    // More than one firm answered to that password, so the person picks. No
+    // session is issued here: the choice token carries only the right to name
+    // one of these memberships, and chooseLoginFirm checks it is one of them.
+    if (claims.memberIds.length > 1) {
+      sendSuccess(
+        res,
+        {
+          ...common,
+          needsFirmChoice: true,
+          choiceToken: signFirmChoiceToken(claims.memberIds, member.email),
+          firms: await describeMemberships(claims.memberIds),
+        },
+        "Choose a firm"
+      );
+      return;
+    }
+
+    const session = await issueSessionFor(claims.memberIds[0]);
+    if (!session) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
+    sendSuccess(res, { ...session, ...common }, "Logged in");
   } catch (error) {
     sendServerError(res, "Could not verify the code", error);
   }
@@ -858,13 +974,13 @@ export const verifyLoginOtp = async (req: Request, res: Response): Promise<void>
 /** POST /firm/auth/login/resend — a fresh login code, behind the same cooldown. */
 export const resendLoginOtp = async (req: Request, res: Response): Promise<void> => {
   try {
-    const claims = readLoginChallengeToken(req);
-    if (!claims) {
+    const claims = readScopedToken(req, "firm-login-otp");
+    if (!claims?.otpMemberId) {
       sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
       return;
     }
 
-    const member = await FirmMember.findById(claims.memberId).select("+loginOtpSentAt");
+    const member = await FirmMember.findById(claims.otpMemberId).select("+loginOtpSentAt");
     if (!member || !member.isActive) {
       sendUnauthorized(res, "This account is no longer active");
       return;
@@ -1227,5 +1343,334 @@ export const revokeAllTrustedDevices = async (
     sendSuccess(res, {}, "Every browser will need the code next time");
   } catch (error) {
     sendServerError(res, "Could not revoke the devices", error);
+  }
+};
+
+/**
+ * POST /firm/auth/login/firm — pick which firm to enter.
+ *
+ * Only reachable with a choice token, which is only minted once the password
+ * and the code have both been accepted. The chosen membership has to be one of
+ * the set that token was minted for, so this cannot be used to enter a firm the
+ * password never opened — the id in the body is checked against the claims, not
+ * trusted on its own.
+ */
+export const chooseLoginFirm = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const claims = readScopedToken(req, "firm-login-choice");
+    if (!claims) {
+      sendUnauthorized(res, "That sign-in attempt has expired. Log in again.");
+      return;
+    }
+
+    const { memberId } = req.body as { memberId?: string };
+    if (!memberId) {
+      sendBadRequest(res, "Choose a firm");
+      return;
+    }
+
+    if (!claims.memberIds.includes(memberId)) {
+      sendForbidden(res, "That firm was not one of yours to choose");
+      return;
+    }
+
+    const session = await issueSessionFor(memberId);
+    if (!session) {
+      sendUnauthorized(res, "This account is no longer active");
+      return;
+    }
+
+    sendSuccess(res, session, "Logged in");
+  } catch (error) {
+    sendServerError(res, "Could not open that firm", error);
+  }
+};
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Joining a firm that already exists
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Mailboxes anyone can register, so matching on them would offer to put every
+ * gmail signup into whichever firm happened to register on gmail first.
+ */
+const PUBLIC_EMAIL_DOMAINS = [
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "icloud.com",
+  "proton.me",
+  "protonmail.com",
+  "live.com",
+  "aol.com",
+];
+
+const domainOf = (email: string): string | null => {
+  const d = String(email).toLowerCase().trim().split("@")[1];
+  return !d || PUBLIC_EMAIL_DOMAINS.includes(d) ? null : d;
+};
+
+/**
+ * GET /firm/auth/firm-by-domain?email= — is a colleague's firm already here?
+ *
+ * Public, and it does confirm that a firm exists on a domain. That is a
+ * deliberate trade: without it the second person at a firm silently creates a
+ * duplicate, and the practice ends up split across two accounts that cannot
+ * see each other's matters — far harder to undo than a request in a queue.
+ *
+ * It returns only the firm's name and headcount, which is not news to anyone
+ * who works there, and free mailboxes are excluded so this cannot be used to
+ * enumerate individuals.
+ */
+export const findFirmByDomain = async (req: Request, res: Response): Promise<void> => {
+  const none = () => {
+    sendSuccess(res, { firm: null }, "No firm on that domain");
+  };
+  try {
+    const email = String(req.query.email ?? "");
+    if (!isEmail(email)) {
+      none();
+      return;
+    }
+
+    const domain = domainOf(email);
+    if (!domain) {
+      none();
+      return;
+    }
+
+    const firm = await Firm.findOne({ domain }).select("name");
+    if (!firm) {
+      none();
+      return;
+    }
+
+    const memberCount = await FirmMember.countDocuments({ firmId: firm._id, isActive: true });
+    sendSuccess(
+      res,
+      { firm: { id: String(firm._id), name: firm.name, domain, memberCount } },
+      "Firm found"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not check that domain", error);
+  }
+};
+
+/** POST /firm/auth/join-request — ask a firm's partners to let you in. */
+export const requestToJoinFirm = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, note } = req.body as { email?: string; note?: string };
+    if (!email || !isEmail(email)) {
+      sendBadRequest(res, "Enter a valid work email address");
+      return;
+    }
+
+    const normalised = email.toLowerCase().trim();
+    const domain = domainOf(normalised);
+    if (!domain) {
+      sendNotFound(res, "No firm is registered on that domain");
+      return;
+    }
+
+    const firm = await Firm.findOne({ domain });
+    if (!firm) {
+      sendNotFound(res, "No firm is registered on that domain");
+      return;
+    }
+
+    if (await FirmMember.findOne({ email: normalised, firmId: firm._id })) {
+      sendConflict(res, "You already have an account at that firm");
+      return;
+    }
+
+    // Asking again refreshes the note rather than stacking a second row on the
+    // approver's queue.
+    await FirmJoinRequest.findOneAndUpdate(
+      { firmId: firm._id, email: normalised, status: "pending" },
+      {
+        firmId: firm._id,
+        email: normalised,
+        note: note ? String(note).trim().slice(0, 500) : undefined,
+        status: "pending",
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    // Whoever can issue an invitation can approve one of these.
+    const approvers = await FirmMember.find({
+      firmId: firm._id,
+      isActive: true,
+      role: { $in: ["managing_partner", "partner", "admin"] },
+    }).select("email");
+
+    await Promise.all(
+      approvers.map((a) =>
+        emailService.sendFirmJoinRequest(a.email, {
+          firmName: firm.name,
+          requesterEmail: normalised,
+          note: note ? String(note).trim() : undefined,
+        })
+      )
+    );
+
+    sendCreated(
+      res,
+      { firmName: firm.name, approvers: approvers.length },
+      "Your request has been sent"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not send the request", error);
+  }
+};
+
+/**
+ * GET /firm/join-requests — the queue, for whoever can act on it.
+ *
+ * Firm-scoped from the session, so one firm cannot read another's queue.
+ */
+export const listJoinRequests = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const rows = await FirmJoinRequest.find({ firmId: firmIdOf(req), status: "pending" })
+      .sort({ createdAt: -1 })
+      .select("email note createdAt");
+
+    sendSuccess(
+      res,
+      {
+        requests: rows.map((r) => ({
+          id: String(r._id),
+          email: r.email,
+          note: r.note ?? null,
+          askedAt: r.createdAt.toISOString(),
+        })),
+      },
+      "Join requests retrieved"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not list the join requests", error);
+  }
+};
+
+/**
+ * POST /firm/join-requests/:id/decline
+ *
+ * Deliberately silent to the asker: telling someone their request was turned
+ * down invites them to ask again, and the firm may have good reasons it does
+ * not want to put in an email.
+ */
+export const declineJoinRequest = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!JOIN_APPROVER_ROLES.includes(roleOf(req))) {
+      sendForbidden(res, "Only a partner or admin can act on join requests");
+      return;
+    }
+
+    const updated = await FirmJoinRequest.findOneAndUpdate(
+      { _id: req.params.id, firmId: firmIdOf(req), status: "pending" },
+      { $set: { status: "declined", decidedBy: memberIdOf(req), decidedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!updated) {
+      sendNotFound(res, "That request is no longer open");
+      return;
+    }
+
+    sendSuccess(res, { id: String(updated._id) }, "Request declined");
+  } catch (error) {
+    sendServerError(res, "Could not decline the request", error);
+  }
+};
+
+/**
+ * POST /firm/join-requests/:id/approve — let them in, at a stated role.
+ *
+ * Approval does not create the member: it issues an ordinary invitation, so
+ * the person still sets their own password and the account is created by the
+ * same path as every other. The approver chooses the role, because the asker
+ * does not get to name their own seniority, and may not choose one above their
+ * own — the same rule invitations already enforce.
+ */
+export const approveJoinRequest = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!JOIN_APPROVER_ROLES.includes(roleOf(req))) {
+      sendForbidden(res, "Only a partner or admin can act on join requests");
+      return;
+    }
+
+    const { role } = req.body as { role?: string };
+    if (!role || !isFirmRole(role)) {
+      sendBadRequest(res, "Choose the role to admit them at");
+      return;
+    }
+    // "At or below your own level" — a lower rank is a higher index.
+    if (rankOf(role) < rankOf(roleOf(req))) {
+      sendForbidden(res, "You cannot admit someone above your own role");
+      return;
+    }
+
+    const firmId = firmIdOf(req);
+    const request = await FirmJoinRequest.findOne({
+      _id: req.params.id,
+      firmId,
+      status: "pending",
+    });
+    if (!request) {
+      sendNotFound(res, "That request is no longer open");
+      return;
+    }
+
+    if (await FirmMember.findOne({ email: request.email, firmId })) {
+      // Someone invited them by hand while this sat in the queue. Close it
+      // rather than issuing a second invitation they do not need.
+      request.status = "approved";
+      request.decidedBy = memberIdOf(req) as never;
+      request.decidedAt = new Date();
+      await request.save();
+      sendConflict(res, "They already have an account at this firm");
+      return;
+    }
+
+    const firm = await Firm.findById(firmId).select("name");
+    const approver = await FirmMember.findById(memberIdOf(req)).select("name");
+
+    // Replace any outstanding invitation rather than stacking a second live
+    // token on the same address — the same rule sendInvitations follows.
+    await FirmInvitation.deleteMany({
+      firmId,
+      email: request.email,
+      acceptedAt: { $exists: false },
+    });
+
+    const token = crypto.randomBytes(32).toString("hex");
+    await FirmInvitation.create({
+      firmId,
+      email: request.email,
+      role,
+      invitedBy: memberIdOf(req),
+      tokenHash: sha256(token),
+      expiresAt: new Date(Date.now() + JOIN_INVITE_TTL_MS),
+    });
+
+    const emailed = await emailService.sendFirmInvitation(request.email, {
+      firmName: firm?.name ?? "the firm",
+      inviterName: approver?.name ?? "A partner",
+      role,
+      link: `${env.FIRM_APP_URL.replace(/\/$/, "")}/invite/${token}`,
+    });
+
+    request.status = "approved";
+    request.decidedBy = memberIdOf(req) as never;
+    request.decidedAt = new Date();
+    await request.save();
+
+    sendSuccess(
+      res,
+      { id: String(request._id), email: request.email, role, emailed },
+      emailed ? "They have been invited" : "Approved, but the invitation email could not be sent"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not approve the request", error);
   }
 };

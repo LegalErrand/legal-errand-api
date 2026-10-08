@@ -170,6 +170,45 @@ export const emailService = {
     return ok;
   },
 
+  /** LE-001 — a colleague is asking to be let into a firm on their domain. */
+  async sendFirmJoinRequest(
+    email: string,
+    o: { firmName: string; requesterEmail: string; note?: string }
+  ): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: `${o.requesterEmail} is asking to join ${o.firmName} on LegalErrand`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Someone wants to join ${escapeHtml(o.firmName)}</h2>
+          <p style="color: #555; line-height: 1.5;">
+            <b>${escapeHtml(o.requesterEmail)}</b> signed up with an address on your firm's
+            domain and asked to be let in rather than starting a second account.
+          </p>
+          ${
+            o.note
+              ? `<blockquote style="margin: 16px 0; padding: 10px 14px; border-left: 3px solid #D97706; color: #555; line-height: 1.5;">${escapeHtml(
+                  o.note
+                )}</blockquote>`
+              : ""
+          }
+          <p style="color: #555; line-height: 1.5;">
+            Approve it from <b>Team &rarr; Join requests</b>, choosing the role to admit them at.
+            Nothing happens until you do.
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            If you do not recognise this address, decline it. Declining tells them nothing.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Join request notice sent to ${email}`);
+    } else {
+      logger.error(`[EMAIL] FAILED to send join request notice to ${email}`);
+    }
+    return ok;
+  },
+
   async sendFirmInvitation(
     email: string,
     o: { firmName: string; inviterName: string; role: string; link: string }

@@ -8,6 +8,8 @@ export interface IFirm extends Document {
   /** CAC/company registration number, so invoices carry the registered name. */
   registrationNumber?: string;
   contactEmail: string;
+  /** Email domain the firm was created on, used to spot colleagues signing up. */
+  domain?: string;
   address?: string;
   /**
    * URL-safe handle for the firm's public pages — the public intake form is
@@ -59,6 +61,7 @@ const FirmSchema = new Schema<IFirm>(
     courtFilingPortalId: { type: String, trim: true },
     registrationNumber: { type: String, trim: true },
     contactEmail: { type: String, required: true, lowercase: true, trim: true },
+    domain: { type: String, lowercase: true, trim: true, index: true },
     address: { type: String, trim: true },
     // Sparse: firms created before this field existed have no slug, and a
     // unique index would otherwise collide on null for all of them.
