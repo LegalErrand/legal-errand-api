@@ -209,6 +209,61 @@ export const emailService = {
     return ok;
   },
 
+  /**
+   * A LegalErrand admin is asking to look inside this firm's workspace.
+   *
+   * Written to be refusable: the decline is as prominent as the approve, and
+   * it says plainly that nothing happens unless they act.
+   */
+  async sendFirmAccessRequest(
+    email: string,
+    o: { firmName: string; adminEmail: string; reason?: string; link: string; hours: number }
+  ): Promise<boolean> {
+    const ok = await sendEmail({
+      to: email,
+      subject: `Someone at LegalErrand is asking to see ${o.firmName}'s workspace`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">A support request needs your permission</h2>
+          <p style="color: #555; line-height: 1.5;">
+            <b>${escapeHtml(o.adminEmail)}</b> at LegalErrand is asking to open a read-only
+            view of <b>${escapeHtml(o.firmName)}</b>'s workspace.
+          </p>
+          ${
+            o.reason
+              ? `<p style="color: #555; line-height: 1.5;">They gave this reason:</p>
+                 <blockquote style="margin: 12px 0; padding: 10px 14px; border-left: 3px solid #9a5f12; color: #555; line-height: 1.5;">${escapeHtml(
+                   o.reason
+                 )}</blockquote>`
+              : ""
+          }
+          <p style="color: #555; line-height: 1.5;">
+            If you approve, they can read your workspace for <b>${o.hours} hours</b> and nothing
+            longer. They will not be able to change, send or delete anything, and you can end it
+            at any point from your firm settings.
+          </p>
+          <p style="text-align: center; margin: 28px 0;">
+            <a href="${escapeHtml(o.link)}" style="background-color: #9a5f12; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 8px; display: inline-block; font-weight: 600;">
+              Review this request
+            </a>
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            <b>Nothing happens unless you approve it.</b> Declining is a normal answer and needs
+            no explanation. If you were not expecting this, decline it and tell us.
+          </p>
+          <p style="color: #777; font-size: 13px; line-height: 1.5;">
+            This link is for you alone and stops working in three days.
+          </p>
+        </div>`,
+    });
+    if (ok) {
+      logger.info(`[EMAIL] Firm access request sent to ${email}`);
+    } else {
+      logger.error(`[EMAIL] FAILED to send firm access request to ${email}`);
+    }
+    return ok;
+  },
+
   async sendFirmInvitation(
     email: string,
     o: { firmName: string; inviterName: string; role: string; link: string }

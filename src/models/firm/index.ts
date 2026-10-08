@@ -1,5 +1,6 @@
 export * from "./Firm";
 export * from "./FirmJoinRequest";
+export * from "./FirmAccessGrant";
 export * from "./FirmMember";
 export * from "./FirmSignup";
 export * from "./FirmInvitation";

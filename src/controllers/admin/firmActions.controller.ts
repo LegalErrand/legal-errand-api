@@ -1,15 +1,24 @@
 import { Response } from "express";
 import { Types } from "mongoose";
 import { AdminRequest } from "../../types";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import {
   Firm,
+  FirmAccessGrant,
   FirmMember,
   FirmNote,
   Invoice,
   Payment,
   Subscription,
   SupportTicket,
+  isGrantUsable,
+  ACCESS_GRANT_TTL_MS,
 } from "../../models/firm";
+import { env } from "../../config/env";
+import { emailService } from "../../services/email/email.service";
+
+const sha256 = (value: string): string => crypto.createHash("sha256").update(value).digest("hex");
 import { FirmPlan, isFirmPlan, listPriceFor, seatsFor } from "../../config/plans";
 import { recordAdminAction, adminNameFor } from "../../services/firm/audit.service";
 import { sendSuccess, sendNotFound, sendError } from "../../utils/response";
@@ -290,11 +299,11 @@ export const retryPayment = async (req: AdminRequest, res: Response): Promise<vo
 /**
  * POST /admin/firms/:id/access-request
  *
- * We do not walk into a firm's workspace on our own say-so. This records that
- * access was asked for, and by whom.
+ * We do not walk into a firm's workspace on our own say-so. This asks the
+ * firm's managing partner, in an email they can act on without logging in,
+ * and records that it was asked.
  *
- * The owner is not notified and no access is granted — that flow does not exist
- * yet, and the response says as much rather than implying a door has opened.
+ * Nothing is granted here. Approval is theirs, lasts a day, and is revocable.
  */
 export const requestAccess = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
@@ -307,27 +316,203 @@ export const requestAccess = async (req: AdminRequest, res: Response): Promise<v
       .select("name email")
       .lean();
 
+    if (!owner) {
+      sendError(
+        res,
+        "This firm has no managing partner to ask, so access cannot be requested",
+        409
+      );
+      return;
+    }
+
+    // Asking again replaces the outstanding request rather than leaving the
+    // owner with two live links for the same thing.
+    await FirmAccessGrant.deleteMany({
+      firmId: firm._id,
+      adminId: req.admin?.adminId,
+      status: "pending",
+    });
+
+    const decisionToken = crypto.randomBytes(32).toString("hex");
+    const grant = await FirmAccessGrant.create({
+      firmId: firm._id,
+      adminId: req.admin?.adminId,
+      adminName: req.admin?.email ?? "A LegalErrand admin",
+      adminEmail: req.admin?.email ?? "",
+      reason: reason ? String(reason).trim().slice(0, 500) : undefined,
+      status: "pending",
+      decisionTokenHash: sha256(decisionToken),
+      // The link outlives the working day it was sent in, and no longer.
+      decisionExpiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+      requestedAt: new Date(),
+    });
+
     await recordAdminAction({
       admin: req.admin,
       action: "Requested access to the workspace",
       firmId: firm._id as Types.ObjectId,
       firmName: firm.name,
-      detail: { reason: reason ?? null, owner: owner?.email ?? null },
+      detail: { reason: reason ?? null, owner: owner.email, grantId: String(grant._id) },
+    });
+
+    const link = `${env.FIRM_APP_URL.replace(/\/$/, "")}/access-request/${decisionToken}`;
+    const emailed = await emailService.sendFirmAccessRequest(owner.email, {
+      firmName: firm.name,
+      adminEmail: req.admin?.email ?? "a LegalErrand admin",
+      reason: reason ? String(reason).trim() : undefined,
+      link,
+      hours: ACCESS_GRANT_TTL_MS / 3_600_000,
     });
 
     sendSuccess(
       res,
       {
-        recorded: true,
-        ownerNotified: false,
+        grantId: String(grant._id),
+        status: "pending",
+        ownerNotified: emailed,
         accessGranted: false,
-        owner: owner ? { name: owner.name, email: owner.email } : null,
+        owner: { name: owner.name, email: owner.email },
       },
-      "Request recorded. The owner has not been notified and no access has been granted — that flow is not built yet.",
+      emailed
+        ? `Asked ${owner.name}. Nothing is granted until they approve it.`
+        : `Request recorded, but the email to ${owner.email} could not be sent.`,
       202
     );
   } catch (err) {
     sendError(res, "Failed to record the access request", 500, (err as Error).message);
+  }
+};
+
+/**
+ * GET /admin/firms/:id/access-request — where our own request stands.
+ *
+ * Scoped to the calling admin: one admin cannot see or use another's grant.
+ */
+export const getAccessRequest = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const loaded = await loadFirm(req, res);
+    if (!loaded) return;
+
+    const grant = await FirmAccessGrant.findOne({
+      firmId: loaded.firm._id,
+      adminId: req.admin?.adminId,
+    }).sort({ createdAt: -1 });
+
+    if (!grant) {
+      sendSuccess(res, { grant: null }, "No access has been asked for");
+      return;
+    }
+
+    sendSuccess(
+      res,
+      {
+        grant: {
+          id: String(grant._id),
+          status: grant.status,
+          reason: grant.reason ?? null,
+          requestedAt: grant.requestedAt.toISOString(),
+          decidedAt: grant.decidedAt?.toISOString() ?? null,
+          decidedByName: grant.decidedByName ?? null,
+          expiresAt: grant.expiresAt?.toISOString() ?? null,
+          usable: isGrantUsable(grant),
+          uses: grant.uses.length,
+        },
+      },
+      "Access request retrieved"
+    );
+  } catch (err) {
+    sendError(res, "Failed to read the access request", 500, (err as Error).message);
+  }
+};
+
+/**
+ * POST /admin/firms/:id/access-session
+ *
+ * Mints the read-only firm session an approved grant permits. The session is
+ * read-only in its own claims and refused for any unsafe method by
+ * authenticateFirm, so this cannot be used to change a firm's data.
+ *
+ * Every mint is written to the grant and to the admin audit log, because "who
+ * looked inside this firm, and when" is the question a firm will eventually
+ * ask.
+ */
+export const startAccessSession = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const loaded = await loadFirm(req, res);
+    if (!loaded) return;
+    const { firm } = loaded;
+
+    const grant = await FirmAccessGrant.findOne({
+      firmId: firm._id,
+      adminId: req.admin?.adminId,
+      status: "approved",
+    }).sort({ createdAt: -1 });
+
+    if (!isGrantUsable(grant)) {
+      sendError(
+        res,
+        "No live approval for this firm. Ask the managing partner, and wait for them to approve it.",
+        403
+      );
+      return;
+    }
+
+    const owner = await FirmMember.findOne({ firmId: firm._id, role: "managing_partner" })
+      .select("_id email role")
+      .lean();
+    if (!owner) {
+      sendError(res, "This firm has no managing partner to act as", 409);
+      return;
+    }
+
+    const ip =
+      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
+      req.ip ??
+      undefined;
+
+    await FirmAccessGrant.updateOne(
+      { _id: grant!._id },
+      { $push: { uses: { at: new Date(), ip } } }
+    );
+
+    await recordAdminAction({
+      admin: req.admin,
+      action: "Opened a read-only support session",
+      firmId: firm._id as Types.ObjectId,
+      firmName: firm.name,
+      detail: { grantId: String(grant!._id), expiresAt: grant!.expiresAt },
+    });
+
+    // The session is capped by the grant, so it can never outlive the
+    // permission that produced it.
+    const secondsLeft = Math.max(60, Math.floor((grant!.expiresAt!.getTime() - Date.now()) / 1000));
+
+    const token = jwt.sign(
+      {
+        memberId: String(owner._id),
+        firmId: String(firm._id),
+        email: owner.email,
+        role: owner.role,
+        scope: "firm",
+        readOnly: true,
+        grantId: String(grant!._id),
+      },
+      env.JWT_SECRET,
+      { expiresIn: secondsLeft }
+    );
+
+    sendSuccess(
+      res,
+      {
+        token,
+        readOnly: true,
+        expiresAt: grant!.expiresAt?.toISOString(),
+        firm: { id: String(firm._id), name: firm.name },
+      },
+      "Read-only session opened. It ends when the approval does."
+    );
+  } catch (err) {
+    sendError(res, "Failed to open the session", 500, (err as Error).message);
   }
 };
 
