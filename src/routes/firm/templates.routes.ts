@@ -26,6 +26,7 @@ router.get("/signatures", tplCtrl.listMySignatures);
 router.post("/signatures", tplCtrl.saveSignature);
 router.post("/signatures/apply", tplCtrl.applySignature);
 router.post("/signatures/request", tplCtrl.requestSignature);
+router.get("/signatures/requests", signCtrl.listSignatureRequests);
 router.get("/signatures/requests/:id/certificate", signCtrl.getSignatureCertificate);
 router.delete("/signatures/:id", tplCtrl.deleteSignature);
 

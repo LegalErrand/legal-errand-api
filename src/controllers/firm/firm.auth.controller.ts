@@ -1674,3 +1674,99 @@ export const approveJoinRequest = async (req: FirmAuthRequest, res: Response): P
     sendServerError(res, "Could not approve the request", error);
   }
 };
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Switching between firms in-session
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * GET /firm/auth/my-firms — the other firms this person belongs to.
+ *
+ * The session token is scoped to one firm, so the top bar needs to know
+ * whether there is anywhere else to go before it offers a switcher.
+ *
+ * Matched on the session's own email, never on anything in the request, so
+ * this cannot be used to ask about somebody else's memberships.
+ */
+export const listMyFirms = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const email = req.member?.email;
+    if (!email) {
+      sendUnauthorized(res, "Not signed in");
+      return;
+    }
+
+    const members = await FirmMember.find({ email, isActive: true }).select("firmId role");
+    const firms = await Firm.find({ _id: { $in: members.map((m) => m.firmId) } }).select("name");
+    const byId = new Map(firms.map((f) => [String(f._id), f.name]));
+    const currentFirmId = String(firmIdOf(req));
+
+    sendSuccess(
+      res,
+      {
+        firms: members
+          // A membership whose firm has been deleted would point at nothing.
+          .filter((m) => byId.has(String(m.firmId)))
+          .map((m) => ({
+            memberId: String(m._id),
+            firmId: String(m.firmId),
+            firmName: byId.get(String(m.firmId))!,
+            role: m.role,
+            isCurrent: String(m.firmId) === currentFirmId,
+          })),
+      },
+      "Memberships retrieved"
+    );
+  } catch (error) {
+    sendServerError(res, "Could not list your firms", error);
+  }
+};
+
+/**
+ * POST /firm/auth/switch-firm — move the session to another of your firms.
+ *
+ * No password or code: the person has already proved both to get the session
+ * they are holding, and this only moves them between memberships that the same
+ * address owns. The membership is matched on the session's email, so a
+ * memberId belonging to anyone else is simply not found.
+ *
+ * It issues a fresh token rather than rewriting one, because the firm id is a
+ * claim inside it and every tenancy check in the API reads it from there.
+ */
+export const switchFirm = async (req: FirmAuthRequest, res: Response): Promise<void> => {
+  try {
+    const email = req.member?.email;
+    if (!email) {
+      sendUnauthorized(res, "Not signed in");
+      return;
+    }
+
+    const { memberId } = req.body as { memberId?: string };
+    if (!memberId) {
+      sendBadRequest(res, "Which firm?");
+      return;
+    }
+
+    const member = await FirmMember.findOne({ _id: memberId, email, isActive: true });
+    if (!member) {
+      sendNotFound(res, "That is not one of your firms");
+      return;
+    }
+
+    const firm = await Firm.findById(member.firmId);
+    if (!firm) {
+      sendNotFound(res, "That firm no longer exists");
+      return;
+    }
+
+    await FirmMember.updateOne({ _id: member._id }, { $set: { lastLogin: new Date() } });
+
+    sendSuccess(
+      res,
+      { token: signFirmSession(member, firm), member: member.toJSON(), firm },
+      `Signed in to ${firm.name}`
+    );
+  } catch (error) {
+    sendServerError(res, "Could not switch firms", error);
+  }
+};

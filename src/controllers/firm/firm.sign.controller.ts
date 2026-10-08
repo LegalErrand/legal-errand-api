@@ -256,3 +256,54 @@ export const getSignatureCertificate = async (req: Request, res: Response): Prom
     sendBadRequest(res, "Failed to retrieve the certificate", error);
   }
 };
+
+/**
+ * GET /firm/signatures/requests?documentId= — who this document went to.
+ *
+ * The list the firm needs to know what is outstanding and what came back. It
+ * carries status and the certificate reference, but not the certificate's
+ * detail: the IP, user agent and hashes are a separate read, so a list view
+ * does not casually hand around evidence it is not showing.
+ */
+export const listSignatureRequests = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const firmId = firmIdOf(req);
+    const documentId = String(req.query.documentId ?? "");
+
+    const rows = await SignatureRequest.find({
+      firmId,
+      ...(documentId ? { documentId } : {}),
+    })
+      .sort({ requestedAt: -1 })
+      .limit(100);
+
+    const requesterIds = [...new Set(rows.map((r) => String(r.requestedBy)))];
+    const requesters = await FirmMember.find({ _id: { $in: requesterIds } }).select("name");
+    const nameById = new Map(requesters.map((m) => [String(m._id), m.name]));
+
+    sendSuccess(
+      res,
+      {
+        requests: rows.map((r) => ({
+          id: String(r._id),
+          documentId: String(r.documentId),
+          name: r.name,
+          capacity: r.capacity,
+          email: r.email,
+          status: r.status,
+          requestedByName: nameById.get(String(r.requestedBy)) ?? "Someone",
+          requestedAt: r.requestedAt.toISOString(),
+          signedAt: r.signedAt?.toISOString() ?? null,
+          declinedAt: r.declinedAt?.toISOString() ?? null,
+          expiresAt: r.expiresAt.toISOString(),
+          certificateRef: r.certificateRef ?? null,
+          /** True once the link can no longer be used, for whatever reason. */
+          spent: r.status !== "pending" || r.expiresAt.getTime() <= Date.now(),
+        })),
+      },
+      "Signature requests retrieved"
+    );
+  } catch (error) {
+    sendBadRequest(res, "Failed to list the signature requests", error);
+  }
+};
